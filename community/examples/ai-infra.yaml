@@ -37,7 +37,6 @@ deployment_groups:
   - id: bucket
     source: modules/file-system/pre-existing-network-storage
     settings:
-      server_ip: n/a
       remote_mount: gs://hpc-toolkit-demo-data
       local_mount: /demo-data
       fs_type: gcsfuse
@@ -50,4 +49,14 @@ deployment_groups:
       install_nvidia_driver: true
       enable_google_monitoring: true
       enable_google_logging: true
+      configure_ray:
+        port: 26379
+        version: 1.12.1
       instance_count: 2
+
+# talking points -- what is possible here
+# - This module is really short with the toolkit: foundational modules.
+#     The tech is good, ew solve a number of problems that will be relevant for you.
+# - Easy to extend in new infrastructure, file systems, schedulers.
+# - Adding custom startup scripts
+# - In a few lines, we could build an image from ai-infra outputs

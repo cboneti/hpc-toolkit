@@ -36,5 +36,3 @@ steps:
     #terraform -chdir=$${DEPLOYMNENT_NAME}/primary init
     #terraform -chdir=$${DEPLOYMNENT_NAME}/primary apply $2
 timeout: "1200s"
-options:
-  machineType: N1_HIGHCPU_8

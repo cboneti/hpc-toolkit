@@ -17,6 +17,23 @@
 locals {
   resource_prefix = var.name_prefix != null ? var.name_prefix : "${var.deployment_name}-ai-infra"
 
+
+  #
+  # if a machine type is a2-*-?g it will automatically fill in the guest_accelerator structure.
+  #
+  is_a2_vm = length(regexall("a2-[a-z]+-\\d+g", var.machine_type)) > 0
+  accelerator_types = {
+    "highgpu"  = "nvidia-tesla-a100"
+    "megagpu"  = "nvidia-tesla-a100"
+    "ultragpu" = "nvidia-a100-80gb"
+  }
+  guest_accelerator = var.guest_accelerator == null && local.is_a2_vm ? [{
+    type  = lookup(local.accelerator_types, regex("a2-([A-Za-z]+)-", var.machine_type)[0], ""),
+    count = one(regex("a2-[A-Za-z]+-(\\d+)", var.machine_type)),
+  }] : var.guest_accelerator
+
+  gpu_count = length(local.guest_accelerator) > 0 ? 0 : local.guest_accelerator[0].count
+
   user_startup_script_runners = var.startup_script == null ? [] : [
     {
       type        = "shell"
@@ -29,7 +46,7 @@ locals {
     "-e host_name_prefix=${local.resource_prefix}"
   ])
 
-  configure_ssh = [
+  configure_ssh_runners = [
     {
       type        = "data"
       source      = "${path.module}/scripts/setup-ssh-keys.sh"
@@ -45,6 +62,15 @@ locals {
       content     = file("${path.module}/scripts/configure-ssh.yml")
       destination = "configure-ssh.yml"
       args        = local.ssh_args
+    }
+  ]
+
+  configure_ray_runners = var.configure_ray == null ? [] : [
+    {
+      type        = "shell"
+      content     = file("${path.module}/scripts/configure-ray.sh")
+      destination = "/usr/local/ghpc/configure-ray.yml"
+      args        = "${var.configure_ray.version} ${var.configure_ray.port} ${local.gpu_count}"
     }
   ]
 
@@ -64,7 +90,7 @@ module "client_startup_script" {
   labels          = var.labels
 
   runners = flatten([
-    local.user_startup_script_runners, local.configure_ssh
+    local.user_startup_script_runners, local.configure_ssh_runners, local.configure_ray_runners
   ])
 }
 
@@ -102,7 +128,7 @@ module "instances" {
   placement_policy     = var.placement_policy
   tags                 = var.tags
 
-  guest_accelerator   = var.guest_accelerator
+  guest_accelerator   = local.guest_accelerator
   on_host_maintenance = var.on_host_maintenance
   threads_per_core    = var.threads_per_core
 

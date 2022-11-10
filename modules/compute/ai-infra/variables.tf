@@ -307,3 +307,15 @@ variable "enable_oslogin" {
   type        = string
   default     = "ENABLE"
 }
+
+variable "configure_ray" {
+  description = "This will trigger the installation of ray and start it on the defined port. Does not install and run ray if set to null."
+  type = object({
+    port    = number,
+    version = string,
+  })
+  default = {
+    port    = 26379
+    version = "1.12.1"
+  }
+}
