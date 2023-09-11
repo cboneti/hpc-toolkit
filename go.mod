@@ -8,7 +8,7 @@ require (
 	github.com/go-git/go-git/v5 v5.7.0
 	github.com/hashicorp/go-getter v1.7.1
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/hashicorp/hcl/v2 v2.17.0
+	github.com/hashicorp/hcl/v2 v2.18.0
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20221020162138-81db043ad408
 	github.com/otiai10/copy v1.11.0
 	github.com/pkg/errors v0.9.1
@@ -30,6 +30,7 @@ require (
 )
 
 require (
+	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.10.0 // indirect
 	github.com/hashicorp/terraform-json v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc // indirect
@@ -81,7 +82,7 @@ require (
 	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/oauth2 v0.8.0 // indirect
 	golang.org/x/sys v0.8.0
-	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/text v0.11.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/grpc v1.55.0 // indirect
