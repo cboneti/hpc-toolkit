@@ -1072,3 +1072,182 @@ window.onload = function () {
   // 6. Initial Generation
   generateBlueprint();
 };
+
+
+// --- IMPORT LOGIC ---
+
+// 1. Event Listener for File Input
+document.getElementById('import-file').addEventListener('change', handleFileImport);
+
+function handleFileImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const content = e.target.result;
+            const data = jsyaml.load(content); // Uses the new library
+            loadBlueprintFromData(data);
+            event.target.value = ''; // Reset input
+        } catch (err) {
+            showMessage("Failed to parse YAML file.", "error");
+            console.error(err);
+        }
+    };
+    reader.readAsText(file);
+}
+
+// 2. Main Load Function
+function loadBlueprintFromData(data) {
+    // Reset State
+    blueprintState.nodes = {};
+    blueprintState.connections = [];
+    blueprintState.customVars = [];
+    nodeIdCounter = {};
+
+    // A. Load Variables
+    if (data.vars) {
+        // Set standard vars to inputs
+        if (data.vars.project_id) document.getElementById('project-id').value = data.vars.project_id;
+        if (data.vars.region) document.getElementById('region').value = data.vars.region;
+
+        // Add others to custom vars
+        Object.entries(data.vars).forEach(([key, value]) => {
+            if (!['project_id', 'region', 'zone', 'deployment_name'].includes(key)) {
+                blueprintState.customVars.push({ key, value });
+            }
+        });
+        renderCustomVars();
+    }
+
+    // B. Load Modules
+    const modules = data.deployment_groups?.[0]?.modules || [];
+
+    // Helper to track hierarchy for auto-layout
+    const nodeLevels = {};
+
+    modules.forEach(mod => {
+        // 1. Find the Module Definition in MODULES_LIST based on 'source'
+        const def = findModuleDefinition(mod.source);
+
+        if (def) {
+            // 2. Create the Node
+            blueprintState.nodes[mod.id] = {
+                id: mod.id,
+                name: def.name, // Visual name from library
+                category: def.category,
+                icon: def.icon,
+                sourcePrefix: def.sourcePrefix,
+                inputs: def.inputs,
+                outputs: def.outputs,
+                x: 0, // Will calculate later
+                y: 0,
+                isExpanded: false
+            };
+
+            // 3. Record Connections
+            if (mod.use) {
+                mod.use.forEach(sourceId => {
+                    // In YAML, 'use' usually points to the Node ID
+                    blueprintState.connections.push({
+                        sourceNodeId: sourceId,
+                        targetNodeId: mod.id
+                    });
+                });
+            }
+        } else {
+            console.warn(`Could not find module definition for: ${mod.source}`);
+        }
+    });
+
+    // C. Auto-Layout (Simple Topological Layering)
+    performAutoLayout();
+
+    // D. Render
+    document.getElementById("blueprint-canvas-container").querySelectorAll(".module-node").forEach(el => el.remove());
+    Object.values(blueprintState.nodes).forEach(renderModuleNode);
+    renderConnections();
+    generateBlueprint(); // Refresh YAML output text
+
+    // Hide "Drag modules here" prompt
+    document.querySelector("#blueprint-canvas-container p").classList.add("hidden");
+
+    showMessage(`Imported ${modules.length} modules successfully.`, "success");
+}
+
+// 3. Helper: Find Module in Library
+function findModuleDefinition(sourcePath) {
+    // Expected formats:
+    // "modules/network/vpc"  -> core
+    // "community/modules/scheduler/schedmd..." -> community
+
+    const parts = sourcePath.split('/');
+    let sourcePrefix = "core";
+    let category = "";
+    let moduleId = "";
+
+    if (parts[0] === "community") {
+        sourcePrefix = "community";
+        // community/modules/<category>/<id>
+        category = parts[2];
+        moduleId = parts[3];
+    } else {
+        // modules/<category>/<id>
+        category = parts[1];
+        moduleId = parts[2];
+    }
+
+    if (MODULES_LIST[sourcePrefix] && MODULES_LIST[sourcePrefix][category]) {
+        const found = MODULES_LIST[sourcePrefix][category].find(m => m.id === moduleId);
+        if (found) {
+            return { ...found, sourcePrefix, category };
+        }
+    }
+    return null;
+}
+
+// 4. Helper: Auto Layout Algorithm
+function performAutoLayout() {
+    const nodes = Object.values(blueprintState.nodes);
+    const nodeIds = nodes.map(n => n.id);
+
+    // Initialize levels (X-axis)
+    const levels = {};
+    nodeIds.forEach(id => levels[id] = 0);
+
+    // Simple depth calculation (iterate a few times to propagate depth)
+    for (let i = 0; i < nodeIds.length; i++) {
+        blueprintState.connections.forEach(conn => {
+            if (levels[conn.sourceNodeId] !== undefined && levels[conn.targetNodeId] !== undefined) {
+                // Target must be at least 1 level deeper than source
+                if (levels[conn.targetNodeId] <= levels[conn.sourceNodeId]) {
+                    levels[conn.targetNodeId] = levels[conn.sourceNodeId] + 1;
+                }
+            }
+        });
+    }
+
+    // Group by level
+    const levelGroups = {};
+    Object.entries(levels).forEach(([id, level]) => {
+        if (!levelGroups[level]) levelGroups[level] = [];
+        levelGroups[level].push(id);
+    });
+
+    // Assign Coordinates
+    const startX = 50;
+    const startY = 50;
+    const xGap = 350; // Width between columns
+    const yGap = 150; // Height between rows
+
+    Object.keys(levelGroups).forEach(level => {
+        const group = levelGroups[level];
+        group.forEach((nodeId, index) => {
+            if (blueprintState.nodes[nodeId]) {
+                blueprintState.nodes[nodeId].x = startX + (level * xGap);
+                blueprintState.nodes[nodeId].y = startY + (index * yGap);
+            }
+        });
+    });
+}
