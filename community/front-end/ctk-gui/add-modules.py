@@ -20,7 +20,7 @@ def format_name(name_str: str) -> str:
 def load_existing_modules() -> dict:
     """
     Loads the module data from the JS file.
-    
+
     Returns:
         A dictionary with the existing module data, or an empty structure if
         the file doesn't exist or is invalid.
@@ -43,7 +43,7 @@ def load_existing_modules() -> dict:
                 file=sys.stderr,
             )
             return {"core": {}, "community": {}}
-        
+
         return json.loads(json_match.group(1))
 
     except (IOError, json.JSONDecodeError) as e:
@@ -56,65 +56,83 @@ def load_existing_modules() -> dict:
 
 def discover_modules(search_dir: Path) -> dict:
     """
-    Scans a directory to find Terraform modules and their variables/outputs using hcl2.
-    
+    Scans a directory exactly 2 levels deep to find Terraform modules.
+    Structure assumed: search_dir / category / module_id / *.tf
+
     Args:
-        search_dir: The directory to scan recursively.
-        
+        search_dir: The directory to scan (e.g., 'modules' or 'community/modules').
+
     Returns:
         A dictionary of discovered modules.
     """
-    print(f"Scanning directory: {search_dir}")
-    tf_files = [p for p in search_dir.rglob("*.tf") if p.name in ["variables.tf", "outputs.tf"]]
-    print(f"Found {len(tf_files)} 'variables.tf' or 'outputs.tf' files.")
+    print(f"Scanning directory: {search_dir} (Depth restricted to Category/Module)")
 
     discovered_modules = {}
 
-    for file_path in tf_files:
-        try:
-            with file_path.open('r', encoding='utf-8') as f:
-                content_dict = hcl2.load(f)
+    # 1. Iterate over Category directories (e.g., 'compute', 'network')
+    for category_dir in search_dir.iterdir():
+        if not category_dir.is_dir() or category_dir.name.startswith('.'):
+            continue
 
-            parts = file_path.parts
-            if len(parts) < 3:
+        # 2. Iterate over Module directories (e.g., 'vm-instance', 'vpc')
+        for module_dir in category_dir.iterdir():
+            if not module_dir.is_dir() or module_dir.name.startswith('.'):
                 continue
 
-            module_id = file_path.parent.name
-            category = file_path.parent.parent.name
-            source_prefix = "community" if "community" in parts else "core"
+            # 3. Look for specific files ONLY in this folder (non-recursive .glob)
+            tf_files = [
+                p for p in module_dir.glob("*.tf")
+                if p.name in ["variables.tf", "outputs.tf"]
+            ]
 
-            # Initialize module structure
-            discovered_modules.setdefault(source_prefix, {})
-            discovered_modules[source_prefix].setdefault(category, {})
-            discovered_modules[source_prefix][category].setdefault(
-                module_id,
-                {
-                    "id": module_id,
-                    "name": format_name(module_id),
-                    "icon": "📦",  # Default icon
-                    "inputs": [], # Now a list of objects
-                    "outputs": [],
-                },
-            )
+            if not tf_files:
+                continue
 
-            if file_path.name == "variables.tf" and 'variable' in content_dict:
-                for var_block in content_dict['variable']:
-                    for var_name, var_details in var_block.items():
-                        is_required = 'default' not in var_details
-                        discovered_modules[source_prefix][category][module_id]["inputs"].append({
-                            "name": var_name,
-                            "required": is_required
-                        })
+            # Process the found files
+            for file_path in tf_files:
+                try:
+                    with file_path.open('r', encoding='utf-8') as f:
+                        content_dict = hcl2.load(f)
 
-            elif file_path.name == "outputs.tf" and 'output' in content_dict:
-                for output_block in content_dict['output']:
-                    for output_name in output_block.keys():
-                        discovered_modules[source_prefix][category][module_id]["outputs"].append(output_name)
+                    parts = file_path.parts
 
-        except Exception as e:
-            print(f"Warning: Could not process file '{file_path}': {e}", file=sys.stderr)
-            continue
-            
+                    # Extract metadata based on path
+                    module_id = module_dir.name
+                    category = category_dir.name
+                    source_prefix = "community" if "community" in parts else "core"
+
+                    # Initialize module structure
+                    discovered_modules.setdefault(source_prefix, {})
+                    discovered_modules[source_prefix].setdefault(category, {})
+                    discovered_modules[source_prefix][category].setdefault(
+                        module_id,
+                        {
+                            "id": module_id,
+                            "name": format_name(module_id),
+                            "icon": "📦",
+                            "inputs": [],
+                            "outputs": [],
+                        },
+                    )
+
+                    if file_path.name == "variables.tf" and 'variable' in content_dict:
+                        for var_block in content_dict['variable']:
+                            for var_name, var_details in var_block.items():
+                                is_required = 'default' not in var_details
+                                discovered_modules[source_prefix][category][module_id]["inputs"].append({
+                                    "name": var_name,
+                                    "required": is_required
+                                })
+
+                    elif file_path.name == "outputs.tf" and 'output' in content_dict:
+                        for output_block in content_dict['output']:
+                            for output_name in output_block.keys():
+                                discovered_modules[source_prefix][category][module_id]["outputs"].append(output_name)
+
+                except Exception as e:
+                    print(f"Warning: Could not process file '{file_path}': {e}", file=sys.stderr)
+                    continue
+
     return discovered_modules
 
 def main():
@@ -156,7 +174,7 @@ def main():
         modules_data.setdefault(source, {})
         for category, modules in categories.items():
             modules_data[source].setdefault(category, [])
-            
+
             # Create a map of existing modules by ID for efficient updates
             existing_modules_map = {m["id"]: m for m in modules_data[source][category]}
 
@@ -174,7 +192,7 @@ def main():
                     existing_module = existing_modules_map[module_id]
                     if (existing_module.get("inputs") != module_info["inputs"] or
                         existing_module.get("outputs") != module_info["outputs"]):
-                        
+
                         existing_module["inputs"] = module_info["inputs"]
                         existing_module["outputs"] = module_info["outputs"]
                         print(f"Updated module: [{source}/{category}/{module_id}]")
@@ -195,7 +213,7 @@ def main():
         new_json_str = json.dumps(modules_data, indent=4)
         js_content = f"const {MODULES_VAR_NAME} = {new_json_str};"
         MODULE_JS_FILE.write_text(js_content + "\n")
-        
+
         print(f"\nSuccessfully added {add_count} new and updated {update_count} existing module(s).")
         print(f"'{MODULE_JS_FILE.name}' has been updated.")
 

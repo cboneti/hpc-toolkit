@@ -6,6 +6,28 @@
     <title>Cluster Toolkit Blueprint Editor</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        .node-handle {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background-color: #e0e7ff; /* Light Indigo */
+            border: 2px solid #4f46e5; /* Indigo */
+            border-radius: 50%;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: crosshair;
+            transition: all 0.2s;
+            z-index: 20;
+        }
+
+        .node-handle:hover {
+            background-color: #4f46e5;
+            transform: translateY(-50%) scale(1.2);
+        }
+
+        /* Position the handles on the edges */
+        .handle-input { left: -8px; }
+        .handle-output { right: -8px; }
         /* Setup Inter font */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
         body {
