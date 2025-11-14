@@ -6,6 +6,7 @@ import re
 import sys
 from pathlib import Path
 import hcl2
+import yaml
 
 # --- Configuration ---
 # The script assumes it is located in the same directory as the target JS file.
@@ -20,10 +21,6 @@ def format_name(name_str: str) -> str:
 def load_existing_modules() -> dict:
     """
     Loads the module data from the JS file.
-
-    Returns:
-        A dictionary with the existing module data, or an empty structure if
-        the file doesn't exist or is invalid.
     """
     if not MODULE_JS_FILE.exists():
         print(f"Info: '{MODULE_JS_FILE.name}' not found. A new file will be created.")
@@ -31,17 +28,10 @@ def load_existing_modules() -> dict:
 
     try:
         content = MODULE_JS_FILE.read_text()
-        # Regex to find "const MODULES_LIST = { ... };" and capture the object
-        # Made more flexible to handle different whitespace.
         json_match = re.search(
             rf"const\s+{MODULES_VAR_NAME}\s*=\s*({{.*}});", content, re.DOTALL
         )
         if not json_match:
-            print(
-                f"Warning: Could not find '{MODULES_VAR_NAME}' in '{MODULE_JS_FILE.name}'. "
-                "Starting with an empty module set.",
-                file=sys.stderr,
-            )
             return {"core": {}, "community": {}}
 
         return json.loads(json_match.group(1))
@@ -54,83 +44,104 @@ def load_existing_modules() -> dict:
         )
         return {"core": {}, "community": {}}
 
+
 def discover_modules(search_dir: Path) -> dict:
     """
-    Scans a directory exactly 2 levels deep to find Terraform modules.
-    Structure assumed: search_dir / category / module_id / *.tf
-
-    Args:
-        search_dir: The directory to scan (e.g., 'modules' or 'community/modules').
-
-    Returns:
-        A dictionary of discovered modules.
+    Scans a directory exactly 2 levels deep to find Terraform modules and metadata.
     """
     print(f"Scanning directory: {search_dir} (Depth restricted to Category/Module)")
 
     discovered_modules = {}
 
-    # 1. Iterate over Category directories (e.g., 'compute', 'network')
+    # 1. Iterate over Category directories
     for category_dir in search_dir.iterdir():
         if not category_dir.is_dir() or category_dir.name.startswith('.'):
             continue
 
-        # 2. Iterate over Module directories (e.g., 'vm-instance', 'vpc')
+        # 2. Iterate over Module directories
         for module_dir in category_dir.iterdir():
             if not module_dir.is_dir() or module_dir.name.startswith('.'):
                 continue
 
-            # 3. Look for specific files ONLY in this folder (non-recursive .glob)
-            tf_files = [
-                p for p in module_dir.glob("*.tf")
-                if p.name in ["variables.tf", "outputs.tf"]
-            ]
+            # 3. Look for ALL .tf files (variables can be split across files)
+            # OLD CODE: if p.name in ["variables.tf", "outputs.tf"]
+            tf_files = list(module_dir.glob("*.tf"))
 
             if not tf_files:
                 continue
 
-            # Process the found files
+            # Initialize module structure
+            module_id = module_dir.name
+            parts = module_dir.parts
+            category = category_dir.name
+            source_prefix = "community" if "community" in parts else "core"
+
+            discovered_modules.setdefault(source_prefix, {})
+            discovered_modules[source_prefix].setdefault(category, {})
+
+            # Default Structure
+            module_data = {
+                "id": module_id,
+                "name": format_name(module_id),
+                "icon": "📦",
+                "inputs": [],
+                "outputs": [],
+                "inject_module_id": None,
+                "has_to_be_used": False
+            }
+
+            # Avoid overwriting if we are processing multiple files for same module
+            if module_id not in discovered_modules[source_prefix][category]:
+                discovered_modules[source_prefix][category][module_id] = module_data
+            else:
+                module_data = discovered_modules[source_prefix][category][module_id]
+
+            # Parse metadata.yaml
+            metadata_path = module_dir / "metadata.yaml"
+            if metadata_path.exists():
+                try:
+                    with metadata_path.open('r', encoding='utf-8') as f:
+                        meta_content = yaml.safe_load(f)
+
+                    ghpc = meta_content.get('ghpc', {})
+                    if 'inject_module_id' in ghpc:
+                        module_data["inject_module_id"] = ghpc['inject_module_id']
+
+                    if 'has_to_be_used' in ghpc:
+                        module_data["has_to_be_used"] = ghpc['has_to_be_used']
+
+                except Exception as e:
+                    print(f"Warning: Could not parse metadata '{metadata_path}': {e}", file=sys.stderr)
+
+            # Process Terraform Files
             for file_path in tf_files:
                 try:
                     with file_path.open('r', encoding='utf-8') as f:
                         content_dict = hcl2.load(f)
 
-                    parts = file_path.parts
-
-                    # Extract metadata based on path
-                    module_id = module_dir.name
-                    category = category_dir.name
-                    source_prefix = "community" if "community" in parts else "core"
-
-                    # Initialize module structure
-                    discovered_modules.setdefault(source_prefix, {})
-                    discovered_modules[source_prefix].setdefault(category, {})
-                    discovered_modules[source_prefix][category].setdefault(
-                        module_id,
-                        {
-                            "id": module_id,
-                            "name": format_name(module_id),
-                            "icon": "📦",
-                            "inputs": [],
-                            "outputs": [],
-                        },
-                    )
-
-                    if file_path.name == "variables.tf" and 'variable' in content_dict:
+                    # Extract Inputs (Variables)
+                    if 'variable' in content_dict:
                         for var_block in content_dict['variable']:
                             for var_name, var_details in var_block.items():
                                 is_required = 'default' not in var_details
-                                discovered_modules[source_prefix][category][module_id]["inputs"].append({
-                                    "name": var_name,
-                                    "required": is_required
-                                })
+                                # Avoid duplicates if variables are redefined (rare) or scanned twice
+                                if not any(i['name'] == var_name for i in module_data["inputs"]):
+                                    module_data["inputs"].append({
+                                        "name": var_name,
+                                        "required": is_required
+                                    })
 
-                    elif file_path.name == "outputs.tf" and 'output' in content_dict:
+                    # Extract Outputs
+                    if 'output' in content_dict:
                         for output_block in content_dict['output']:
                             for output_name in output_block.keys():
-                                discovered_modules[source_prefix][category][module_id]["outputs"].append(output_name)
+                                if output_name not in module_data["outputs"]:
+                                    module_data["outputs"].append(output_name)
 
                 except Exception as e:
-                    print(f"Warning: Could not process file '{file_path}': {e}", file=sys.stderr)
+                    # hcl2 might fail on complex main.tf files, but we only strictly need variables/outputs
+                    # If it fails, we just skip that specific file.
+                    # print(f"Debug: Skipping file '{file_path}' due to parse error: {e}", file=sys.stderr)
                     continue
 
     return discovered_modules
@@ -175,7 +186,6 @@ def main():
         for category, modules in categories.items():
             modules_data[source].setdefault(category, [])
 
-            # Create a map of existing modules by ID for efficient updates
             existing_modules_map = {m["id"]: m for m in modules_data[source][category]}
 
             for module_id, module_info in modules.items():
@@ -188,26 +198,24 @@ def main():
                     print(f"Added module: [{source}/{category}/{module_id}]")
                     add_count += 1
                 else:
-                    # Update existing module's inputs and outputs
                     existing_module = existing_modules_map[module_id]
                     if (existing_module.get("inputs") != module_info["inputs"] or
-                        existing_module.get("outputs") != module_info["outputs"]):
+                        existing_module.get("outputs") != module_info["outputs"] or
+                        existing_module.get("inject_module_id") != module_info["inject_module_id"] or
+                        existing_module.get("has_to_be_used") != module_info["has_to_be_used"]):
 
                         existing_module["inputs"] = module_info["inputs"]
                         existing_module["outputs"] = module_info["outputs"]
+                        existing_module["inject_module_id"] = module_info["inject_module_id"]
+                        existing_module["has_to_be_used"] = module_info["has_to_be_used"]
                         print(f"Updated module: [{source}/{category}/{module_id}]")
                         update_count += 1
-                    else:
-                        print(f"Module already exists and is up-to-date, skipping: [{source}/{category}/{module_id}]")
 
     # 4. Write the updated content back to the JS file
     try:
-        # Sort categories and modules within for deterministic output
         for source, categories in modules_data.items():
-            # Sort modules within each category
             for category, modules in categories.items():
                 modules.sort(key=lambda m: m["id"])
-            # Sort the categories themselves
             modules_data[source] = dict(sorted(categories.items()))
 
         new_json_str = json.dumps(modules_data, indent=4)

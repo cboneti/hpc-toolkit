@@ -109,7 +109,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "instructions"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "gke-node-pool",
@@ -297,7 +299,9 @@ const MODULES_LIST = {
                     "tpu_accelerator_type",
                     "tpu_chips_per_node",
                     "tpu_topology"
-                ]
+                ],
+                "inject_module_id": "internal_ghpc_module_id",
+                "has_to_be_used": false
             },
             {
                 "id": "resource-policy",
@@ -327,7 +331,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "placement_policy"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "vm-instance",
@@ -501,7 +507,9 @@ const MODULES_LIST = {
                     "internal_ip",
                     "name",
                     "self_link"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "file-system": [
@@ -590,7 +598,9 @@ const MODULES_LIST = {
                     "install_nfs_client_runner",
                     "mount_runner",
                     "network_storage"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "gke-persistent-volume",
@@ -641,7 +651,9 @@ const MODULES_LIST = {
                 "outputs": [
                     "persistent_volume_claims",
                     "pvc_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "gke-storage",
@@ -699,7 +711,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "persistent_volume_claims"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "managed-lustre",
@@ -776,7 +790,9 @@ const MODULES_LIST = {
                     "install_managed_lustre_client",
                     "lustre_id",
                     "network_storage"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "parallelstore",
@@ -851,7 +867,9 @@ const MODULES_LIST = {
                 "outputs": [
                     "instructions",
                     "network_storage"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "pre-existing-network-storage",
@@ -891,10 +909,33 @@ const MODULES_LIST = {
                     "client_install_runner",
                     "mount_runner",
                     "network_storage"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "internal": [
+            {
+                "id": "gpu-definition",
+                "name": "Gpu Definition",
+                "icon": "\ud83d\udce6",
+                "inputs": [
+                    {
+                        "name": "guest_accelerator",
+                        "required": false
+                    },
+                    {
+                        "name": "machine_type",
+                        "required": true
+                    }
+                ],
+                "outputs": [
+                    "guest_accelerator",
+                    "machine_type_guest_accelerator"
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
+            },
             {
                 "id": "instance_validations",
                 "name": "Instance_validations",
@@ -909,7 +950,41 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
+            },
+            {
+                "id": "network-attachment",
+                "name": "Network Attachment",
+                "icon": "\ud83d\udce6",
+                "inputs": [
+                    {
+                        "name": "connection_preference",
+                        "required": false
+                    },
+                    {
+                        "name": "name",
+                        "required": true
+                    },
+                    {
+                        "name": "project_id",
+                        "required": true
+                    },
+                    {
+                        "name": "region",
+                        "required": true
+                    },
+                    {
+                        "name": "subnetwork_self_links",
+                        "required": true
+                    }
+                ],
+                "outputs": [
+                    "self_link"
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "tpu-definition",
@@ -931,7 +1006,49 @@ const MODULES_LIST = {
                     "tpu_chips_per_node",
                     "tpu_taint",
                     "tpu_topology"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
+            },
+            {
+                "id": "vpc_peering",
+                "name": "Vpc_peering",
+                "icon": "\ud83d\udce6",
+                "inputs": [
+                    {
+                        "name": "export_custom_routes",
+                        "required": false
+                    },
+                    {
+                        "name": "import_custom_routes",
+                        "required": false
+                    },
+                    {
+                        "name": "import_subnet_routes_with_public_ip",
+                        "required": false
+                    },
+                    {
+                        "name": "name",
+                        "required": true
+                    },
+                    {
+                        "name": "network_self_link",
+                        "required": true
+                    },
+                    {
+                        "name": "peer_network_self_link",
+                        "required": true
+                    },
+                    {
+                        "name": "stack_type",
+                        "required": false
+                    }
+                ],
+                "outputs": [
+                    "peering_name"
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "management": [
@@ -977,7 +1094,9 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "monitoring": [
@@ -1013,7 +1132,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "instructions"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "network": [
@@ -1043,7 +1164,9 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "gpu-rdma-vpc",
@@ -1119,7 +1242,9 @@ const MODULES_LIST = {
                     "subnetwork_interfaces_gke",
                     "subnetwork_name_prefix",
                     "subnetworks"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "multivpc",
@@ -1219,7 +1344,9 @@ const MODULES_LIST = {
                     "subnetwork_addresses",
                     "subnetwork_names",
                     "subnetwork_self_links"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "pre-existing-subnetwork",
@@ -1248,7 +1375,9 @@ const MODULES_LIST = {
                     "subnetwork_address",
                     "subnetwork_name",
                     "subnetwork_self_link"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": true
             },
             {
                 "id": "pre-existing-vpc",
@@ -1280,7 +1409,9 @@ const MODULES_LIST = {
                     "subnetwork_address",
                     "subnetwork_name",
                     "subnetwork_self_link"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "vpc",
@@ -1422,7 +1553,9 @@ const MODULES_LIST = {
                     "subnetwork_name",
                     "subnetwork_self_link",
                     "subnetworks"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "scheduler": [
@@ -1543,7 +1676,9 @@ const MODULES_LIST = {
                     "job_data",
                     "network_storage",
                     "startup_script"
-                ]
+                ],
+                "inject_module_id": "job_id",
+                "has_to_be_used": false
             },
             {
                 "id": "batch-login-node",
@@ -1614,7 +1749,9 @@ const MODULES_LIST = {
                 "outputs": [
                     "instructions",
                     "login_node_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "gke-cluster",
@@ -1884,7 +2021,9 @@ const MODULES_LIST = {
                     "gke_version",
                     "instructions",
                     "k8s_service_account_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "pre-existing-gke-cluster",
@@ -1916,7 +2055,9 @@ const MODULES_LIST = {
                     "cluster_id",
                     "gke_cluster_exists",
                     "gke_version"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "scripts": [
@@ -2026,7 +2167,9 @@ const MODULES_LIST = {
                     "compute_startup_script",
                     "controller_startup_script",
                     "startup_script"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ]
     },
@@ -2098,7 +2241,11 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [
+                    "nodeset_name"
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "gke-partition",
@@ -2126,7 +2273,9 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "htcondor-execute-point",
@@ -2261,7 +2410,9 @@ const MODULES_LIST = {
                 "outputs": [
                     "autoscaler_runner",
                     "mig_id"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "mig",
@@ -2311,7 +2462,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "self_link"
-                ]
+                ],
+                "inject_module_id": "ghpc_module_id",
+                "has_to_be_used": false
             },
             {
                 "id": "notebook",
@@ -2359,7 +2512,9 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "schedmd-slurm-gcp-v6-nodeset",
@@ -2601,7 +2756,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "nodeset"
-                ]
+                ],
+                "inject_module_id": "name",
+                "has_to_be_used": true
             },
             {
                 "id": "schedmd-slurm-gcp-v6-nodeset-dynamic",
@@ -2777,7 +2934,9 @@ const MODULES_LIST = {
                     "instance_template_self_link",
                     "node_name_prefix",
                     "nodeset_dyn"
-                ]
+                ],
+                "inject_module_id": "name",
+                "has_to_be_used": false
             },
             {
                 "id": "schedmd-slurm-gcp-v6-nodeset-tpu",
@@ -2867,7 +3026,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "nodeset_tpu"
-                ]
+                ],
+                "inject_module_id": "name",
+                "has_to_be_used": true
             },
             {
                 "id": "schedmd-slurm-gcp-v6-partition",
@@ -2924,7 +3085,9 @@ const MODULES_LIST = {
                     "nodeset_dyn",
                     "nodeset_tpu",
                     "partitions"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": true
             }
         ],
         "container": [
@@ -2992,7 +3155,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "registry_url"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "database": [
@@ -3020,7 +3185,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "dataset_id"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "bigquery-table",
@@ -3056,7 +3223,9 @@ const MODULES_LIST = {
                     "dataset_id",
                     "table_id",
                     "table_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "slurm-cloudsql-federation",
@@ -3158,7 +3327,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "cloudsql"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "file-system": [
@@ -3281,7 +3452,9 @@ const MODULES_LIST = {
                     "network_storage",
                     "private_addresses",
                     "ssh_console"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "cloud-storage-bucket",
@@ -3379,7 +3552,9 @@ const MODULES_LIST = {
                     "gcs_bucket_path",
                     "mount_runner",
                     "network_storage"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "nfs-server",
@@ -3484,7 +3659,9 @@ const MODULES_LIST = {
                     "install_nfs_client_runner",
                     "mount_runner",
                     "network_storage"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "weka-client",
@@ -3511,7 +3688,9 @@ const MODULES_LIST = {
                 "outputs": [
                     "client_install_runner",
                     "mount_runner"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "files": [
@@ -3549,7 +3728,9 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "management": [
@@ -3587,7 +3768,9 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "network": [
@@ -3630,7 +3813,9 @@ const MODULES_LIST = {
                     "connect_mode",
                     "private_vpc_connection_peering",
                     "reserved_ip_range"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "project": [
@@ -3700,7 +3885,9 @@ const MODULES_LIST = {
                     "key",
                     "service_account_email",
                     "service_account_iam_email"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "service-enablement",
@@ -3720,7 +3907,9 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "pubsub": [
@@ -3760,7 +3949,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "subscription_id"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "topic",
@@ -3795,7 +3986,9 @@ const MODULES_LIST = {
                 "outputs": [
                     "topic_id",
                     "topic_schema"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "remote-desktop": [
@@ -3924,7 +4117,9 @@ const MODULES_LIST = {
                 "outputs": [
                     "instance_name",
                     "startup_script"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "scheduler": [
@@ -4065,7 +4260,9 @@ const MODULES_LIST = {
                 "outputs": [
                     "access_point_ips",
                     "access_point_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "htcondor-central-manager",
@@ -4165,7 +4362,9 @@ const MODULES_LIST = {
                     "central_manager_ips",
                     "central_manager_name",
                     "list_instances_command"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "htcondor-pool-secrets",
@@ -4215,7 +4414,9 @@ const MODULES_LIST = {
                     "execute_point_runner",
                     "pool_password_secret_id",
                     "windows_startup_ps1"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "htcondor-service-accounts",
@@ -4247,7 +4448,9 @@ const MODULES_LIST = {
                     "access_point_service_account_email",
                     "central_manager_service_account_email",
                     "execute_point_service_account_email"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "htcondor-setup",
@@ -4289,7 +4492,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "htcondor_bucket_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "schedmd-slurm-gcp-v6-controller",
@@ -4297,11 +4502,31 @@ const MODULES_LIST = {
                 "icon": "\ud83d\udce6",
                 "inputs": [
                     {
+                        "name": "additional_disks",
+                        "required": false
+                    },
+                    {
+                        "name": "advanced_machine_features",
+                        "required": false
+                    },
+                    {
+                        "name": "allow_automatic_updates",
+                        "required": false
+                    },
+                    {
+                        "name": "bandwidth_tier",
+                        "required": false
+                    },
+                    {
                         "name": "bucket_dir",
                         "required": false
                     },
                     {
                         "name": "bucket_name",
+                        "required": false
+                    },
+                    {
+                        "name": "can_ip_forward",
                         "required": false
                     },
                     {
@@ -4325,6 +4550,14 @@ const MODULES_LIST = {
                         "required": false
                     },
                     {
+                        "name": "controller_network_attachment",
+                        "required": false
+                    },
+                    {
+                        "name": "controller_project_id",
+                        "required": false
+                    },
+                    {
                         "name": "controller_startup_script",
                         "required": false
                     },
@@ -4345,7 +4578,35 @@ const MODULES_LIST = {
                         "required": true
                     },
                     {
+                        "name": "disable_controller_public_ips",
+                        "required": false
+                    },
+                    {
                         "name": "disable_default_mounts",
+                        "required": false
+                    },
+                    {
+                        "name": "disable_smt",
+                        "required": false
+                    },
+                    {
+                        "name": "disk_auto_delete",
+                        "required": false
+                    },
+                    {
+                        "name": "disk_labels",
+                        "required": false
+                    },
+                    {
+                        "name": "disk_resource_manager_tags",
+                        "required": false
+                    },
+                    {
+                        "name": "disk_size_gb",
+                        "required": false
+                    },
+                    {
+                        "name": "disk_type",
                         "required": false
                     },
                     {
@@ -4365,6 +4626,14 @@ const MODULES_LIST = {
                         "required": false
                     },
                     {
+                        "name": "enable_confidential_vm",
+                        "required": false
+                    },
+                    {
+                        "name": "enable_controller_public_ips",
+                        "required": false
+                    },
+                    {
                         "name": "enable_debug_logging",
                         "required": false
                     },
@@ -4381,11 +4650,23 @@ const MODULES_LIST = {
                         "required": false
                     },
                     {
+                        "name": "enable_oslogin",
+                        "required": false
+                    },
+                    {
+                        "name": "enable_shielded_vm",
+                        "required": false
+                    },
+                    {
                         "name": "enable_slurm_auth",
                         "required": false
                     },
                     {
                         "name": "enable_slurm_gcp_plugins",
+                        "required": false
+                    },
+                    {
+                        "name": "enable_smt",
                         "required": false
                     },
                     {
@@ -4405,6 +4686,26 @@ const MODULES_LIST = {
                         "required": false
                     },
                     {
+                        "name": "guest_accelerator",
+                        "required": false
+                    },
+                    {
+                        "name": "instance_image",
+                        "required": false
+                    },
+                    {
+                        "name": "instance_image_custom",
+                        "required": false
+                    },
+                    {
+                        "name": "instance_template",
+                        "required": false
+                    },
+                    {
+                        "name": "labels",
+                        "required": false
+                    },
+                    {
                         "name": "login_network_storage",
                         "required": false
                     },
@@ -4418,6 +4719,18 @@ const MODULES_LIST = {
                     },
                     {
                         "name": "login_startup_scripts_timeout",
+                        "required": false
+                    },
+                    {
+                        "name": "machine_type",
+                        "required": false
+                    },
+                    {
+                        "name": "metadata",
+                        "required": false
+                    },
+                    {
+                        "name": "min_cpu_platform",
                         "required": false
                     },
                     {
@@ -4437,7 +4750,15 @@ const MODULES_LIST = {
                         "required": false
                     },
                     {
+                        "name": "on_host_maintenance",
+                        "required": false
+                    },
+                    {
                         "name": "partitions",
+                        "required": false
+                    },
+                    {
+                        "name": "preemptible",
                         "required": false
                     },
                     {
@@ -4453,6 +4774,26 @@ const MODULES_LIST = {
                         "required": true
                     },
                     {
+                        "name": "resource_manager_tags",
+                        "required": false
+                    },
+                    {
+                        "name": "service_account",
+                        "required": false
+                    },
+                    {
+                        "name": "service_account_email",
+                        "required": false
+                    },
+                    {
+                        "name": "service_account_scopes",
+                        "required": false
+                    },
+                    {
+                        "name": "shielded_instance_config",
+                        "required": false
+                    },
+                    {
                         "name": "slurm_cluster_name",
                         "required": false
                     },
@@ -4466,6 +4807,18 @@ const MODULES_LIST = {
                     },
                     {
                         "name": "slurmdbd_conf_tpl",
+                        "required": false
+                    },
+                    {
+                        "name": "static_ips",
+                        "required": false
+                    },
+                    {
+                        "name": "subnetwork_self_link",
+                        "required": true
+                    },
+                    {
+                        "name": "tags",
                         "required": false
                     },
                     {
@@ -4494,7 +4847,9 @@ const MODULES_LIST = {
                     "slurm_cluster_name",
                     "slurm_controller_instance",
                     "slurm_login_instances"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "schedmd-slurm-gcp-v6-login",
@@ -4668,7 +5023,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "login_nodes"
-                ]
+                ],
+                "inject_module_id": "name_prefix",
+                "has_to_be_used": true
             },
             {
                 "id": "slinky",
@@ -4751,7 +5108,9 @@ const MODULES_LIST = {
                 "outputs": [
                     "slurm_namespace",
                     "slurm_operator_namespace"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ],
         "scripts": [
@@ -4781,7 +5140,9 @@ const MODULES_LIST = {
                     "gcp_service_list",
                     "runners",
                     "windows_startup_ps1"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "ramble-execute",
@@ -4845,7 +5206,9 @@ const MODULES_LIST = {
                     "spack_profile_script_path",
                     "startup_script",
                     "system_user_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "ramble-setup",
@@ -4914,7 +5277,9 @@ const MODULES_LIST = {
                     "ramble_runner",
                     "startup_script",
                     "system_user_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "spack-execute",
@@ -4973,7 +5338,9 @@ const MODULES_LIST = {
                     "spack_runner",
                     "startup_script",
                     "system_user_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "spack-setup",
@@ -5045,7 +5412,9 @@ const MODULES_LIST = {
                     "spack_runner",
                     "startup_script",
                     "system_user_name"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "wait-for-startup",
@@ -5077,7 +5446,9 @@ const MODULES_LIST = {
                         "required": true
                     }
                 ],
-                "outputs": []
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
             },
             {
                 "id": "windows-startup-script",
@@ -5111,7 +5482,9 @@ const MODULES_LIST = {
                 ],
                 "outputs": [
                     "windows_startup_ps1"
-                ]
+                ],
+                "inject_module_id": null,
+                "has_to_be_used": false
             }
         ]
     }

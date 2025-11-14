@@ -1,3 +1,48 @@
+// --- VALUE EDITING LOGIC ---
+let editingNodeId = null;
+let editingVarName = null;
+const valueModal = document.getElementById("value-modal");
+const valueInput = document.getElementById("value-modal-input");
+
+// Setup Modal Listeners (Run once on load)
+document.getElementById("value-modal-cancel").addEventListener("click", () => {
+  valueModal.classList.add("hidden");
+});
+
+document.getElementById("value-modal-save").addEventListener("click", () => {
+  const val = valueInput.value.trim();
+  if (editingNodeId && editingVarName) {
+    // Initialize settings object if missing
+    if (!blueprintState.nodes[editingNodeId].settings) {
+      blueprintState.nodes[editingNodeId].settings = {};
+    }
+
+    if (val === "") {
+      delete blueprintState.nodes[editingNodeId].settings[editingVarName];
+    } else {
+      blueprintState.nodes[editingNodeId].settings[editingVarName] = val;
+    }
+
+    // Update UI
+    renderModuleNode(blueprintState.nodes[editingNodeId]);
+    generateBlueprint();
+  }
+  valueModal.classList.add("hidden");
+});
+
+function openValueModal(nodeId, varName) {
+  editingNodeId = nodeId;
+  editingVarName = varName;
+  const currentVal = blueprintState.nodes[nodeId].settings?.[varName] || "";
+
+  document.getElementById(
+    "value-modal-title"
+  ).textContent = `Set value for '${varName}'`;
+  valueInput.value = currentVal;
+  valueModal.classList.remove("hidden");
+  valueInput.focus();
+}
+
 // --- CORE STATE ---
 // The MODULES_LIST constant is now loaded from ctk-modules.js
 
@@ -191,7 +236,7 @@ function handleVarChange(index, type, event) {
     // 3. Update the DOM input directly (Visual feedback without re-rendering the whole list)
     // We only write back if it changed to avoid cursor jumping issues
     if (event.target.value !== sanitizedKey) {
-       event.target.value = sanitizedKey;
+      event.target.value = sanitizedKey;
     }
   } else {
     // Update State for values
@@ -246,7 +291,6 @@ function renderCustomVars() {
 }
 
 // --- RENDER FUNCTIONS ---
-
 function renderModulePalette() {
   const palette = document.getElementById("module-palette");
   palette.innerHTML = "";
@@ -255,41 +299,97 @@ function renderModulePalette() {
   for (const sourcePrefix in MODULES_LIST) {
     const prefixName =
       sourcePrefix === "core" ? "Core Modules" : "Community Modules";
-    // Top-Level Header (Core or Community)
-    const prefixHeader = document.createElement("h3");
+
+    // 1. Create Source Section Container
+    const sourceSection = document.createElement("div");
+    sourceSection.className = "mb-4 border-b border-gray-200 pb-2";
+
+    // 2. Create Source Header (Clickable)
+    const prefixHeader = document.createElement("div");
     prefixHeader.className =
-      "text-base font-bold mt-4 mb-2 text-indigo-700 capitalize";
-    prefixHeader.textContent = prefixName;
-    palette.appendChild(prefixHeader);
+      "flex items-center justify-between cursor-pointer text-indigo-700 hover:bg-indigo-50 p-2 rounded transition-colors select-none";
+
+    // CHANGED: Start with iconExpand (Collapsed state)
+    prefixHeader.innerHTML = `
+        <span class="text-base font-bold capitalize">${prefixName}</span>
+        <span class="text-indigo-500">${iconExpand}</span>
+    `;
+
+    // 3. Create Container for Categories
+    const categoriesContainer = document.createElement("div");
+    // CHANGED: Added 'hidden' class by default
+    categoriesContainer.className = "pl-2 mt-1 hidden";
+
+    // Toggle Logic for Source Prefix
+    prefixHeader.addEventListener("click", () => {
+      const isHidden = categoriesContainer.classList.toggle("hidden");
+      // Update Icon
+      const iconSpan = prefixHeader.querySelector("span:last-child");
+      // If hidden, show Expand (>), if visible, show Down (v)
+      iconSpan.innerHTML = isHidden ? iconExpand : iconChevronDown;
+    });
+
+    sourceSection.appendChild(prefixHeader);
+    sourceSection.appendChild(categoriesContainer);
+    palette.appendChild(sourceSection);
 
     const categories = MODULES_LIST[sourcePrefix];
 
     // Iterate through categories (network, compute, storage, etc.)
     for (const category in categories) {
-      // Category Header
-      const categoryHeader = document.createElement("h4");
+      // 4. Create Category Section
+      const categorySection = document.createElement("div");
+      categorySection.className = "mb-2";
+
+      // 5. Create Category Header (Clickable)
+      const categoryHeader = document.createElement("div");
       categoryHeader.className =
-        "text-sm font-semibold mt-2 mb-1 text-gray-500 capitalize";
-      categoryHeader.textContent = category.replace(/_/g, " "); // Display category nicely
-      palette.appendChild(categoryHeader);
+        "flex items-center justify-between cursor-pointer text-gray-600 hover:text-indigo-600 hover:bg-gray-100 p-1.5 rounded transition-colors select-none";
+
+      // CHANGED: Start with iconExpand (Collapsed state)
+      categoryHeader.innerHTML = `
+        <span class="text-sm font-semibold capitalize">${category.replace(
+          /_/g,
+          " "
+        )}</span>
+        <span class="text-gray-400 scale-75">${iconExpand}</span>
+      `;
+
+      // 6. Create Container for Modules
+      const modulesContainer = document.createElement("div");
+      // CHANGED: Added 'hidden' class by default
+      modulesContainer.className = "pl-2 mt-1 hidden";
+
+      // Toggle Logic for Category
+      categoryHeader.addEventListener("click", () => {
+        const isHidden = modulesContainer.classList.toggle("hidden");
+        const iconSpan = categoryHeader.querySelector("span:last-child");
+        iconSpan.innerHTML = isHidden ? iconExpand : iconChevronDown;
+      });
+
+      categorySection.appendChild(categoryHeader);
+      categorySection.appendChild(modulesContainer);
+      categoriesContainer.appendChild(categorySection);
 
       // Modules
       categories[category].forEach((module) => {
         const moduleEl = document.createElement("div");
         moduleEl.className =
-          "p-2 bg-white border border-gray-300 rounded-md mb-2 shadow-sm text-sm cursor-grab hover:bg-indigo-50 transition duration-100";
+          "p-2 bg-white border border-gray-300 rounded-md mb-2 shadow-sm text-sm cursor-grab hover:bg-indigo-50 transition duration-100 flex items-center gap-2";
         moduleEl.setAttribute("draggable", true);
-        moduleEl.textContent = `${module.icon} ${module.name}`;
+
+        // Add Icon + Name
+        moduleEl.innerHTML = `<span class="opacity-75">${module.icon}</span> <span>${module.name}</span>`;
+
         moduleEl.addEventListener("dragstart", (e) => {
-          // Attach category and sourcePrefix (core/community) to the drag data
           draggedModule = {
             ...module,
             category: category,
             sourcePrefix: sourcePrefix,
           };
-          e.dataTransfer.setData("text/plain", module.id); // Required for drag/drop
+          e.dataTransfer.setData("text/plain", module.id);
         });
-        palette.appendChild(moduleEl);
+        modulesContainer.appendChild(moduleEl);
       });
     }
   }
@@ -297,112 +397,181 @@ function renderModulePalette() {
 
 // --- VALIDATION LOGIC ---
 function getUnsatisfiedInputs(nodeId) {
-    const node = blueprintState.nodes[nodeId];
-    if (!node) return [];
+  const node = blueprintState.nodes[nodeId];
+  if (!node) return [];
 
-    // 1. Create a pool of "Available Variables"
-    // Start with Global Defaults AND special system variables
-    const availableVars = new Set([
-        "project_id",
-        "deployment_name",
-        "region",
-        "zone",
-        "labels", // <-- ADDED: System automatically handles this
-        // Add user-defined custom variables from the sidebar
-        ...blueprintState.customVars.map(v => v.key)
-    ]);
+  // 1. Base Available Vars
+  const availableVars = new Set([
+    "project_id",
+    "deployment_name",
+    "region",
+    "zone",
+    "labels",
+    ...blueprintState.customVars.map((v) => v.key),
+  ]);
 
-    // 2. Add outputs from ALL connected source nodes
-    blueprintState.connections.forEach(conn => {
-        if (conn.targetNodeId === nodeId) {
-            const sourceNode = blueprintState.nodes[conn.sourceNodeId];
-            if (sourceNode && sourceNode.outputs) {
-                sourceNode.outputs.forEach(outputName => {
-                    availableVars.add(outputName);
-                });
-            }
-        }
-    });
+  // If the metadata says 'name_prefix' is injected, we pretend it's available.
+  if (node.inject_module_id) {
+    availableVars.add(node.inject_module_id);
+  }
 
-    // 3. Check the node's required inputs against this pool
-    const missing = node.inputs
-        .filter(input => input.required) // Only care about required inputs
-        .filter(input => !availableVars.has(input.name)) // Is it missing from the pool?
-        .map(input => input.name);
+  // 2. Add outputs from connected sources
+  blueprintState.connections.forEach((conn) => {
+    if (conn.targetNodeId === nodeId) {
+      const sourceNode = blueprintState.nodes[conn.sourceNodeId];
+      if (sourceNode && sourceNode.outputs) {
+        sourceNode.outputs.forEach((o) => availableVars.add(o));
+      }
+    }
+  });
 
-    return missing;
+  // 3. Check requirements
+  // 3. Check requirements
+  return node.inputs
+    .filter((input) => input.required)
+    .filter((input) => {
+      // Rule A: Is it available globally or via connection?
+      const isAvailable = availableVars.has(input.name);
+
+      // Rule B: NEW - Did the user manually set it in this node's settings?
+      const isManuallySet =
+        node.settings &&
+        node.settings[input.name] !== undefined &&
+        node.settings[input.name] !== "";
+
+      // It is unsatisfied if NEITHER A nor B is true
+      return !isAvailable && !isManuallySet;
+    })
+    .map((input) => input.name);
 }
 
 function renderModuleNode(node) {
-    let nodeEl = document.getElementById(node.id);
+  let nodeEl = document.getElementById(node.id);
 
-    // 1. Calculate Status
-    const missingInputs = getUnsatisfiedInputs(node.id);
-    const hasError = missingInputs.length > 0;
-    // Create a signature to check if we actually need to re-render HTML
-    const stateSignature = `${hasError ? 'err' : 'ok'}-${node.isExpanded}-${missingInputs.join(',')}`;
+  // 1. VALIDATION LOGIC
+  const missingInputs = getUnsatisfiedInputs(node.id);
+  const mustBeUsed = node.has_to_be_used === true;
+  const isUsed = blueprintState.connections.some(
+    (conn) => conn.sourceNodeId === node.id
+  );
+  const usageError = mustBeUsed && !isUsed;
+  const hasError = missingInputs.length > 0 || usageError;
 
-    if (!nodeEl) {
-        // --- INITIAL CREATION ---
-        nodeEl = document.createElement("div");
-        nodeEl.id = node.id;
+  // 2. BUILD ERROR MESSAGE
+  let errorMessages = [];
+  if (missingInputs.length > 0)
+    errorMessages.push(`Missing inputs: ${missingInputs.length}`);
+  if (usageError) errorMessages.push("Must be used by another module");
+  const statusMessage = errorMessages.join(". ");
 
-        // IMPORTANT: Attach the Drag Listener to the main container once
-        nodeEl.addEventListener("mousedown", (e) => startDrag(e, node.id));
+  const stateSignature = `${hasError ? "err" : "ok"}-${
+    node.isExpanded
+  }-${missingInputs.join(",")}-${usageError}`;
 
-        canvasContainer.appendChild(nodeEl);
-    } else {
-        // --- OPTIMIZATION CHECK ---
-        // If the node exists and its state hasn't changed, only update position.
-        // This prevents "thrashing" (destroying the handles while you are dragging them).
-        if (nodeEl.dataset.state === stateSignature) {
-            nodeEl.style.left = `${node.x}px`;
-            nodeEl.style.top = `${node.y}px`;
-            return;
-        }
+  if (!nodeEl) {
+    nodeEl = document.createElement("div");
+    nodeEl.id = node.id;
+    // Drag listener on the main container
+    nodeEl.addEventListener("mousedown", (e) => startDrag(e, node.id));
+    canvasContainer.appendChild(nodeEl);
+  } else {
+    if (nodeEl.dataset.state === stateSignature) {
+      nodeEl.style.left = `${node.x}px`;
+      nodeEl.style.top = `${node.y}px`;
+      return;
     }
+  }
 
-    // Update the state signature for next time
-    nodeEl.dataset.state = stateSignature;
+  nodeEl.dataset.state = stateSignature;
 
-    // --- VISUAL STYLING ---
-    const statusIcon = hasError
-        ? `<span class="text-red-500" title="Missing inputs: ${missingInputs.join(', ')}">⚠️</span>`
-        : `<span class="text-green-500">✅</span>`;
+  // 3. VISUAL ELEMENTS
+  const statusIcon = hasError
+    ? `<span class="text-red-500">⚠️</span>`
+    : `<span class="text-green-500">✅</span>`;
+  const borderClass = hasError
+    ? "border-red-400 shadow-red-100"
+    : "border-gray-300";
 
-    const borderClass = hasError ? "border-red-400 shadow-red-100" : "border-gray-300";
+  const errorBanner = hasError
+    ? `<div class="mt-1 p-1 bg-red-50 border border-red-100 rounded text-[10px] text-red-600 font-semibold leading-tight">
+             ${statusMessage}
+           </div>`
+    : "";
 
-    nodeEl.className = `module-node absolute bg-white p-3 rounded-xl shadow-lg border-2 ${borderClass} cursor-move transition-shadow hover:shadow-xl z-10`;
+  nodeEl.className = `module-node absolute bg-white p-3 rounded-xl shadow-lg border-2 ${borderClass} cursor-move transition-shadow hover:shadow-xl z-10 flex flex-col`;
+  // Added flex flex-col and max-height to main card to ensure clean layout
+  nodeEl.style.maxHeight = "600px";
 
-    // Generate Lists
-    const inputListHTML = node.inputs.map(i => {
-        const isMissing = missingInputs.includes(i.name);
-        const style = isMissing ? "text-red-600 font-bold" : "text-gray-600";
-        const icon = isMissing ? "*" : "";
-        return `<div class="truncate ${style}" title="${i.name}">${i.name}${icon}</div>`;
-    }).join("");
+  // Input/Output Lists
+  const inputListHTML = node.inputs
+    .map((i) => {
+      const isMissing = missingInputs.includes(i.name);
 
-    const outputListHTML = node.outputs.map(o =>
-        `<div class="truncate text-gray-600" title="${o}">${o}</div>`
-    ).join("");
+      // Check if a manual value exists
+      const manualValue = node.settings?.[i.name];
 
-    // --- DOM INJECTION ---
-    nodeEl.innerHTML = `
-        <div class="flex justify-between items-center mb-2 pointer-events-none">
+      // Styling logic
+      let textClass = "text-gray-600";
+      let displaySuffix = "";
+
+      if (manualValue) {
+        // If set manually: Blue text, show value
+        textClass = "text-blue-600 font-medium";
+        displaySuffix = `: <span class="text-gray-400 font-mono text-[10px]">${manualValue}</span>`;
+      } else if (isMissing) {
+        // If missing: Red text
+        textClass = "text-red-600 font-bold";
+        displaySuffix = "*";
+      }
+
+      // Return a clickable div (added onclick)
+      // We use a special data attribute or ID to help binding, but inline onclick is easiest here
+      return `
+            <div class="truncate ${textClass} px-1 cursor-pointer hover:bg-indigo-50 rounded transition-colors"
+                 title="Click to set value"
+                 onclick="event.stopPropagation(); openValueModal('${node.id}', '${i.name}')">
+                ${i.name}${displaySuffix}
+            </div>`;
+    })
+    .join("");
+
+  const outputListHTML = node.outputs
+    .map(
+      (o) => `<div class="truncate text-gray-600 px-1" title="${o}">${o}</div>`
+    )
+    .join("");
+
+  nodeEl.innerHTML = `
+        <div class="flex justify-between items-center mb-1 pointer-events-none flex-shrink-0">
             <div class="font-bold text-indigo-800 flex items-center gap-2">
                 ${node.icon} ${node.name}
                 <div class="text-xs">${statusIcon}</div>
             </div>
-            <button id="expand-btn-${node.id}" class="pointer-events-auto text-gray-400 hover:text-indigo-600">
+            <button id="expand-btn-${
+              node.id
+            }" class="pointer-events-auto text-gray-400 hover:text-indigo-600">
                 ${node.isExpanded ? iconChevronUp : iconChevronDown}
             </button>
         </div>
-        <div class="text-xs text-gray-500 mb-2 font-mono pointer-events-none">${node.id}</div>
 
-        <div id="details-${node.id}" class="${node.isExpanded ? '' : 'hidden'} text-xs border-t pt-2 mt-2">
-            <div class="grid grid-cols-2 gap-2 pointer-events-none">
-               <div><span class="font-semibold">Inputs:</span><div>${inputListHTML}</div></div>
-               <div class="text-right"><span class="font-semibold">Outputs:</span><div>${outputListHTML}</div></div>
+        <div class="text-xs text-gray-500 mb-1 font-mono pointer-events-none truncate flex-shrink-0">${
+          node.id
+        }</div>
+
+        ${errorBanner}
+
+        <div id="details-${node.id}" class="${
+    node.isExpanded ? "" : "hidden"
+  } text-xs border-t pt-2 mt-2 overflow-y-auto custom-scrollbar bg-gray-50 rounded border-gray-100 border" style="max-height: 300px;">
+            <div class="grid grid-cols-2 gap-2">
+               <div class="border-r border-gray-200 pr-1">
+                   <span class="font-semibold block mb-1 text-gray-700 sticky top-0 bg-gray-50">Inputs:</span>
+                   ${inputListHTML}
+               </div>
+               <div class="text-right pl-1">
+                   <span class="font-semibold block mb-1 text-gray-700 sticky top-0 bg-gray-50">Outputs:</span>
+                   ${outputListHTML}
+               </div>
             </div>
         </div>
 
@@ -410,103 +579,117 @@ function renderModuleNode(node) {
         <div class="node-handle handle-output" title="Drag FROM here"></div>
     `;
 
-    // --- RE-ATTACH LISTENERS (Required because innerHTML was replaced) ---
+  // --- LISTENERS ---
 
-    // 1. Expand Button
-    nodeEl.querySelector(`#expand-btn-${node.id}`).addEventListener("click", (e) => {
-        e.stopPropagation();
-        toggleModuleExpansion(node.id);
+  // 1. Expand/Collapse
+  nodeEl
+    .querySelector(`#expand-btn-${node.id}`)
+    .addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleModuleExpansion(node.id);
     });
 
-    // 2. Connection Handles (CRITICAL: This fixes the broken lines)
-    const outHandle = nodeEl.querySelector(".handle-output");
-    outHandle.addEventListener("mousedown", (e) => startConnection(e, node.id));
+  // 2. Prevent Dragging when scrolling the list
+  const detailsDiv = nodeEl.querySelector(`#details-${node.id}`);
+  detailsDiv.addEventListener("mousedown", (e) => e.stopPropagation());
 
-    const inHandle = nodeEl.querySelector(".handle-input");
-    inHandle.addEventListener("mouseup", (e) => endConnection(e, node.id));
+  // 3. Handles
+  const outHandle = nodeEl.querySelector(".handle-output");
+  outHandle.addEventListener("mousedown", (e) => startConnection(e, node.id));
 
-    // 3. Delete Context Menu
-    nodeEl.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        if (confirm(`Delete ${node.name}?`)) removeModule(node.id);
-    });
+  const inHandle = nodeEl.querySelector(".handle-input");
+  inHandle.addEventListener("mouseup", (e) => endConnection(e, node.id));
 
-    // Update Position
-    nodeEl.style.left = `${node.x}px`;
-    nodeEl.style.top = `${node.y}px`;
+  // 4. Delete
+  nodeEl.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    if (confirm(`Delete ${node.name}?`)) removeModule(node.id);
+  });
+
+  nodeEl.style.left = `${node.x}px`;
+  nodeEl.style.top = `${node.y}px`;
 }
 
 function renderConnections() {
-    // 1. Clear existing SVG
-    const defs = svg.querySelector("defs");
-    svg.innerHTML = "";
-    svg.appendChild(defs);
+  // 1. Clear existing SVG
+  const defs = svg.querySelector("defs");
+  svg.innerHTML = "";
+  svg.appendChild(defs);
 
-    // 2. Draw Connections
-    blueprintState.connections.forEach((conn) => {
-        const sourceNode = blueprintState.nodes[conn.sourceNodeId];
-        const targetNode = blueprintState.nodes[conn.targetNodeId];
+  // 2. Draw Connections
+  blueprintState.connections.forEach((conn) => {
+    const sourceNode = blueprintState.nodes[conn.sourceNodeId];
+    const targetNode = blueprintState.nodes[conn.targetNodeId];
 
-        // Safety check
-        if (!sourceNode || !targetNode) return;
+    // Safety check
+    if (!sourceNode || !targetNode) return;
 
-        const start = getConnectionPointPosition(conn.sourceNodeId, "source");
-        const end = getConnectionPointPosition(conn.targetNodeId, "target");
+    const start = getConnectionPointPosition(conn.sourceNodeId, "source");
+    const end = getConnectionPointPosition(conn.targetNodeId, "target");
 
-        if ((start.x === 0 && start.y === 0) || (end.x === 0 && end.y === 0)) return;
+    if ((start.x === 0 && start.y === 0) || (end.x === 0 && end.y === 0))
+      return;
 
-        // --- VALIDATION LOGIC: Check for Variable Match ---
-        // Does the source provide ANY variable that the destination actually has as an input?
-        const hasMatch = sourceNode.outputs.some(outputName =>
-            targetNode.inputs.some(input => input.name === outputName)
-        );
+    // --- VALIDATION LOGIC: Check for Variable Match ---
+    // Does the source provide ANY variable that the destination actually has as an input?
+    const hasMatch = sourceNode.outputs.some((outputName) =>
+      targetNode.inputs.some((input) => input.name === outputName)
+    );
 
-        // Color: Indigo (Valid) vs Red (No Match/Useless)
-        const strokeColor = hasMatch ? "#4f46e5" : "#ef4444";
+    // Color: Indigo (Valid) vs Red (No Match/Useless)
+    const strokeColor = hasMatch ? "#4f46e5" : "#ef4444";
 
-        // Draw Curve
-        const dx = Math.abs(start.x - end.x) * 0.5;
-        const pathData = `M${start.x},${start.y} C${start.x + dx},${start.y} ${end.x - dx},${end.y} ${end.x},${end.y}`;
+    // Draw Curve
+    const dx = Math.abs(start.x - end.x) * 0.5;
+    const pathData = `M${start.x},${start.y} C${start.x + dx},${start.y} ${
+      end.x - dx
+    },${end.y} ${end.x},${end.y}`;
 
-        const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        line.setAttribute("d", pathData);
-        line.setAttribute("stroke", strokeColor);
-        line.setAttribute("stroke-width", "2");
-        line.setAttribute("fill", "none");
-        line.setAttribute("marker-end", "url(#arrowhead)");
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    line.setAttribute("d", pathData);
+    line.setAttribute("stroke", strokeColor);
+    line.setAttribute("stroke-width", "2");
+    line.setAttribute("fill", "none");
+    line.setAttribute("marker-end", "url(#arrowhead)");
 
-        // Interaction
-        line.style.pointerEvents = "stroke";
-        line.style.cursor = "pointer";
-        line.addEventListener("click", () => removeConnection(conn));
+    // Interaction
+    line.style.pointerEvents = "stroke";
+    line.style.cursor = "pointer";
+    line.addEventListener("click", () => removeConnection(conn));
 
-        // Add a tooltip to explain why it's red
-        if (!hasMatch) {
-            const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-            title.textContent = "No matching variables found between these modules.";
-            line.appendChild(title);
-        }
-
-        svg.appendChild(line);
-    });
-
-    // 3. Refresh Node Status (Red/Green)
-    Object.values(blueprintState.nodes).forEach(node => {
-        renderModuleNode(node);
-    });
-
-    // 4. Draw Active Drag Line
-    if (connectionData.isConnecting) {
-        const tempLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        tempLine.setAttribute("x1", connectionData.startPoint.x);
-        tempLine.setAttribute("y1", connectionData.startPoint.y);
-        tempLine.setAttribute("x2", connectionData.currentPoint.x);
-        tempLine.setAttribute("y2", connectionData.currentPoint.y);
-        tempLine.setAttribute("stroke", "#6366f1");
-        tempLine.setAttribute("stroke-dasharray", "5,5");
-        tempLine.setAttribute("stroke-width", "2");
-        svg.appendChild(tempLine);
+    // Add a tooltip to explain why it's red
+    if (!hasMatch) {
+      const title = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "title"
+      );
+      title.textContent = "No matching variables found between these modules.";
+      line.appendChild(title);
     }
+
+    svg.appendChild(line);
+  });
+
+  // 3. Refresh Node Status (Red/Green)
+  Object.values(blueprintState.nodes).forEach((node) => {
+    renderModuleNode(node);
+  });
+
+  // 4. Draw Active Drag Line
+  if (connectionData.isConnecting) {
+    const tempLine = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "line"
+    );
+    tempLine.setAttribute("x1", connectionData.startPoint.x);
+    tempLine.setAttribute("y1", connectionData.startPoint.y);
+    tempLine.setAttribute("x2", connectionData.currentPoint.x);
+    tempLine.setAttribute("y2", connectionData.currentPoint.y);
+    tempLine.setAttribute("stroke", "#6366f1");
+    tempLine.setAttribute("stroke-dasharray", "5,5");
+    tempLine.setAttribute("stroke-width", "2");
+    svg.appendChild(tempLine);
+  }
 }
 
 // --- DRAG & DROP LOGIC (New Nodes) ---
@@ -534,6 +717,9 @@ function dropNode(e) {
       inputs: draggedModule.inputs,
       outputs: draggedModule.outputs,
       isExpanded: false,
+      settings: {}, // Initialize empty settings
+      inject_module_id: draggedModule.inject_module_id,
+      has_to_be_used: draggedModule.has_to_be_used
     };
     blueprintState.nodes[newNodeId] = newNode;
     renderModuleNode(newNode);
@@ -862,6 +1048,22 @@ function generateBlueprint() {
       yaml += `    use: [${Array.from(dependencies).join(", ")}]\n`;
     }
 
+    // Write Settings
+    if (node.settings && Object.keys(node.settings).length > 0) {
+      yaml += `    settings:\n`;
+      Object.entries(node.settings).forEach(([key, val]) => {
+        // Check if value looks like a number or boolean, otherwise quote string
+        const isNumber = !isNaN(val) && val.trim() !== "";
+        const isBool = val === "true" || val === "false";
+
+        if (isNumber || isBool) {
+          yaml += `      ${key}: ${val}\n`;
+        } else {
+          yaml += `      ${key}: "${val}"\n`;
+        }
+      });
+    }
+
     yaml += `\n`;
   });
 
@@ -1002,12 +1204,17 @@ window.onload = function () {
   toggleBtn.addEventListener("click", toggleSettingsPanel);
 
   // 5. Event Listeners
-  document.getElementById("project-id").addEventListener("input", generateBlueprint);
-  document.getElementById("region").addEventListener("input", generateBlueprint);
+  document
+    .getElementById("project-id")
+    .addEventListener("input", generateBlueprint);
+  document
+    .getElementById("region")
+    .addEventListener("input", generateBlueprint);
 
   // Copy Button
   document.getElementById("generate-yaml-btn").addEventListener("click", () => {
-    navigator.clipboard.writeText(yamlOutput.value)
+    navigator.clipboard
+      .writeText(yamlOutput.value)
       .then(() => showMessage("YAML Blueprint copied!", "success"))
       .catch(() => showMessage("Failed to copy.", "error"));
   });
@@ -1073,181 +1280,196 @@ window.onload = function () {
   generateBlueprint();
 };
 
-
 // --- IMPORT LOGIC ---
 
 // 1. Event Listener for File Input
-document.getElementById('import-file').addEventListener('change', handleFileImport);
+document
+  .getElementById("import-file")
+  .addEventListener("change", handleFileImport);
 
 function handleFileImport(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+  const file = event.target.files[0];
+  if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const content = e.target.result;
-            const data = jsyaml.load(content); // Uses the new library
-            loadBlueprintFromData(data);
-            event.target.value = ''; // Reset input
-        } catch (err) {
-            showMessage("Failed to parse YAML file.", "error");
-            console.error(err);
-        }
-    };
-    reader.readAsText(file);
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const content = e.target.result;
+      const data = jsyaml.load(content); // Uses the new library
+      loadBlueprintFromData(data);
+      event.target.value = ""; // Reset input
+    } catch (err) {
+      showMessage("Failed to parse YAML file.", "error");
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
 }
 
 // 2. Main Load Function
 function loadBlueprintFromData(data) {
-    // Reset State
-    blueprintState.nodes = {};
-    blueprintState.connections = [];
-    blueprintState.customVars = [];
-    nodeIdCounter = {};
+  // Reset State
+  blueprintState.nodes = {};
+  blueprintState.connections = [];
+  blueprintState.customVars = [];
+  nodeIdCounter = {};
 
-    // A. Load Variables
-    if (data.vars) {
-        // Set standard vars to inputs
-        if (data.vars.project_id) document.getElementById('project-id').value = data.vars.project_id;
-        if (data.vars.region) document.getElementById('region').value = data.vars.region;
+  // A. Load Variables
+  if (data.vars) {
+    // Set standard vars to inputs
+    if (data.vars.project_id)
+      document.getElementById("project-id").value = data.vars.project_id;
+    if (data.vars.region)
+      document.getElementById("region").value = data.vars.region;
 
-        // Add others to custom vars
-        Object.entries(data.vars).forEach(([key, value]) => {
-            if (!['project_id', 'region', 'zone', 'deployment_name'].includes(key)) {
-                blueprintState.customVars.push({ key, value });
-            }
-        });
-        renderCustomVars();
-    }
-
-    // B. Load Modules
-    const modules = data.deployment_groups?.[0]?.modules || [];
-
-    // Helper to track hierarchy for auto-layout
-    const nodeLevels = {};
-
-    modules.forEach(mod => {
-        // 1. Find the Module Definition in MODULES_LIST based on 'source'
-        const def = findModuleDefinition(mod.source);
-
-        if (def) {
-            // 2. Create the Node
-            blueprintState.nodes[mod.id] = {
-                id: mod.id,
-                name: def.name, // Visual name from library
-                category: def.category,
-                icon: def.icon,
-                sourcePrefix: def.sourcePrefix,
-                inputs: def.inputs,
-                outputs: def.outputs,
-                x: 0, // Will calculate later
-                y: 0,
-                isExpanded: false
-            };
-
-            // 3. Record Connections
-            if (mod.use) {
-                mod.use.forEach(sourceId => {
-                    // In YAML, 'use' usually points to the Node ID
-                    blueprintState.connections.push({
-                        sourceNodeId: sourceId,
-                        targetNodeId: mod.id
-                    });
-                });
-            }
-        } else {
-            console.warn(`Could not find module definition for: ${mod.source}`);
-        }
+    // Add others to custom vars
+    Object.entries(data.vars).forEach(([key, value]) => {
+      if (!["project_id", "region", "zone", "deployment_name"].includes(key)) {
+        blueprintState.customVars.push({ key, value });
+      }
     });
+    renderCustomVars();
+  }
 
-    // C. Auto-Layout (Simple Topological Layering)
-    performAutoLayout();
+  // B. Load Modules
+  const modules = data.deployment_groups?.[0]?.modules || [];
 
-    // D. Render
-    document.getElementById("blueprint-canvas-container").querySelectorAll(".module-node").forEach(el => el.remove());
-    Object.values(blueprintState.nodes).forEach(renderModuleNode);
-    renderConnections();
-    generateBlueprint(); // Refresh YAML output text
+  // Helper to track hierarchy for auto-layout
+  const nodeLevels = {};
 
-    // Hide "Drag modules here" prompt
-    document.querySelector("#blueprint-canvas-container p").classList.add("hidden");
+  modules.forEach((mod) => {
+    // 1. Find the Module Definition in MODULES_LIST based on 'source'
+    const def = findModuleDefinition(mod.source);
 
-    showMessage(`Imported ${modules.length} modules successfully.`, "success");
+    if (def) {
+      // 2. Create the Node
+      blueprintState.nodes[mod.id] = {
+        id: mod.id,
+        name: def.name, // Visual name from library
+        category: def.category,
+        icon: def.icon,
+        sourcePrefix: def.sourcePrefix,
+        inputs: def.inputs,
+        outputs: def.outputs,
+        x: 0, // Will calculate later
+        y: 0,
+        isExpanded: false,
+        inject_module_id: def.inject_module_id,
+        has_to_be_used: def.has_to_be_used,
+      };
+
+      // 3. Record Connections
+      if (mod.use) {
+        mod.use.forEach((sourceId) => {
+          // In YAML, 'use' usually points to the Node ID
+          blueprintState.connections.push({
+            sourceNodeId: sourceId,
+            targetNodeId: mod.id,
+          });
+        });
+      }
+    } else {
+      console.warn(`Could not find module definition for: ${mod.source}`);
+    }
+  });
+
+  // C. Auto-Layout (Simple Topological Layering)
+  performAutoLayout();
+
+  // D. Render
+  document
+    .getElementById("blueprint-canvas-container")
+    .querySelectorAll(".module-node")
+    .forEach((el) => el.remove());
+  Object.values(blueprintState.nodes).forEach(renderModuleNode);
+  renderConnections();
+  generateBlueprint(); // Refresh YAML output text
+
+  // Hide "Drag modules here" prompt
+  document
+    .querySelector("#blueprint-canvas-container p")
+    .classList.add("hidden");
+
+  showMessage(`Imported ${modules.length} modules successfully.`, "success");
 }
 
 // 3. Helper: Find Module in Library
 function findModuleDefinition(sourcePath) {
-    // Expected formats:
-    // "modules/network/vpc"  -> core
-    // "community/modules/scheduler/schedmd..." -> community
+  // Expected formats:
+  // "modules/network/vpc"  -> core
+  // "community/modules/scheduler/schedmd..." -> community
 
-    const parts = sourcePath.split('/');
-    let sourcePrefix = "core";
-    let category = "";
-    let moduleId = "";
+  const parts = sourcePath.split("/");
+  let sourcePrefix = "core";
+  let category = "";
+  let moduleId = "";
 
-    if (parts[0] === "community") {
-        sourcePrefix = "community";
-        // community/modules/<category>/<id>
-        category = parts[2];
-        moduleId = parts[3];
-    } else {
-        // modules/<category>/<id>
-        category = parts[1];
-        moduleId = parts[2];
+  if (parts[0] === "community") {
+    sourcePrefix = "community";
+    // community/modules/<category>/<id>
+    category = parts[2];
+    moduleId = parts[3];
+  } else {
+    // modules/<category>/<id>
+    category = parts[1];
+    moduleId = parts[2];
+  }
+
+  if (MODULES_LIST[sourcePrefix] && MODULES_LIST[sourcePrefix][category]) {
+    const found = MODULES_LIST[sourcePrefix][category].find(
+      (m) => m.id === moduleId
+    );
+    if (found) {
+      return { ...found, sourcePrefix, category };
     }
-
-    if (MODULES_LIST[sourcePrefix] && MODULES_LIST[sourcePrefix][category]) {
-        const found = MODULES_LIST[sourcePrefix][category].find(m => m.id === moduleId);
-        if (found) {
-            return { ...found, sourcePrefix, category };
-        }
-    }
-    return null;
+  }
+  return null;
 }
 
 // 4. Helper: Auto Layout Algorithm
 function performAutoLayout() {
-    const nodes = Object.values(blueprintState.nodes);
-    const nodeIds = nodes.map(n => n.id);
+  const nodes = Object.values(blueprintState.nodes);
+  const nodeIds = nodes.map((n) => n.id);
 
-    // Initialize levels (X-axis)
-    const levels = {};
-    nodeIds.forEach(id => levels[id] = 0);
+  // Initialize levels (X-axis)
+  const levels = {};
+  nodeIds.forEach((id) => (levels[id] = 0));
 
-    // Simple depth calculation (iterate a few times to propagate depth)
-    for (let i = 0; i < nodeIds.length; i++) {
-        blueprintState.connections.forEach(conn => {
-            if (levels[conn.sourceNodeId] !== undefined && levels[conn.targetNodeId] !== undefined) {
-                // Target must be at least 1 level deeper than source
-                if (levels[conn.targetNodeId] <= levels[conn.sourceNodeId]) {
-                    levels[conn.targetNodeId] = levels[conn.sourceNodeId] + 1;
-                }
-            }
-        });
-    }
-
-    // Group by level
-    const levelGroups = {};
-    Object.entries(levels).forEach(([id, level]) => {
-        if (!levelGroups[level]) levelGroups[level] = [];
-        levelGroups[level].push(id);
+  // Simple depth calculation (iterate a few times to propagate depth)
+  for (let i = 0; i < nodeIds.length; i++) {
+    blueprintState.connections.forEach((conn) => {
+      if (
+        levels[conn.sourceNodeId] !== undefined &&
+        levels[conn.targetNodeId] !== undefined
+      ) {
+        // Target must be at least 1 level deeper than source
+        if (levels[conn.targetNodeId] <= levels[conn.sourceNodeId]) {
+          levels[conn.targetNodeId] = levels[conn.sourceNodeId] + 1;
+        }
+      }
     });
+  }
 
-    // Assign Coordinates
-    const startX = 50;
-    const startY = 50;
-    const xGap = 350; // Width between columns
-    const yGap = 150; // Height between rows
+  // Group by level
+  const levelGroups = {};
+  Object.entries(levels).forEach(([id, level]) => {
+    if (!levelGroups[level]) levelGroups[level] = [];
+    levelGroups[level].push(id);
+  });
 
-    Object.keys(levelGroups).forEach(level => {
-        const group = levelGroups[level];
-        group.forEach((nodeId, index) => {
-            if (blueprintState.nodes[nodeId]) {
-                blueprintState.nodes[nodeId].x = startX + (level * xGap);
-                blueprintState.nodes[nodeId].y = startY + (index * yGap);
-            }
-        });
+  // Assign Coordinates
+  const startX = 50;
+  const startY = 50;
+  const xGap = 350; // Width between columns
+  const yGap = 150; // Height between rows
+
+  Object.keys(levelGroups).forEach((level) => {
+    const group = levelGroups[level];
+    group.forEach((nodeId, index) => {
+      if (blueprintState.nodes[nodeId]) {
+        blueprintState.nodes[nodeId].x = startX + level * xGap;
+        blueprintState.nodes[nodeId].y = startY + index * yGap;
+      }
     });
+  });
 }
