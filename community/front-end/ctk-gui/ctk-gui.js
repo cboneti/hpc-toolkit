@@ -1188,51 +1188,6 @@ function toggleSettingsPanel() {
   renderConnections();
 }
 // --- INITIALIZATION ---
-window.onload = function () {
-  // 1. Generate a new unique name on load
-  generatedBlueprintName = generateUniqueName();
-
-  // 2. UI Setup
-  document.getElementById("confirm-modal").style.display = "none";
-  canvasContainer.style.position = "relative";
-
-  // 3. Render Palette
-  renderModulePalette();
-
-  // 4. Toggle Button Setup
-  toggleBtn.innerHTML = iconCollapse;
-  toggleBtn.addEventListener("click", toggleSettingsPanel);
-
-  // 5. Event Listeners
-  document
-    .getElementById("project-id")
-    .addEventListener("input", generateBlueprint);
-  document
-    .getElementById("region")
-    .addEventListener("input", generateBlueprint);
-
-  // Copy Button
-  document.getElementById("generate-yaml-btn").addEventListener("click", () => {
-    navigator.clipboard
-      .writeText(yamlOutput.value)
-      .then(() => showMessage("YAML Blueprint copied!", "success"))
-      .catch(() => showMessage("Failed to copy.", "error"));
-  });
-
-  // Custom Vars
-  addVarBtn.addEventListener("click", addVariable);
-  renderCustomVars();
-
-  // Window Resize
-  window.addEventListener("resize", () => {
-    if (Object.keys(blueprintState.nodes).length > 0) {
-      renderConnections();
-    }
-  });
-
-  // 6. Initial Generation
-  generateBlueprint();
-};
 // --- INITIALIZATION ---
 window.onload = function () {
   // 1. Generate a new unique name on load
@@ -1245,17 +1200,78 @@ window.onload = function () {
   // 3. Render Palette
   renderModulePalette();
 
+  // --- SEARCH LISTENER START ---
+  const searchInput = document.getElementById('module-search');
+  if (searchInput) {
+      searchInput.addEventListener('keyup', (e) => {
+        const term = e.target.value.toLowerCase();
+        const palette = document.getElementById('module-palette');
+
+        // A. Filter individual modules
+        const modules = palette.querySelectorAll('[draggable="true"]');
+        modules.forEach(mod => {
+          const text = mod.textContent.toLowerCase();
+          const isMatch = text.includes(term);
+          mod.style.display = isMatch ? 'flex' : 'none';
+
+          if(isMatch && term !== '') {
+            mod.classList.add('search-match');
+          } else {
+            mod.classList.remove('search-match');
+          }
+        });
+
+        // B. Handle Categories (Open accordions if they contain matches)
+        const categoriesContainers = palette.querySelectorAll('.pl-2.mt-1');
+
+        categoriesContainers.forEach(container => {
+          // Check if this container has any visible children
+          const hasVisibleChildren = Array.from(container.children).some(child => {
+             // If it's a module container, check display style
+             if (child.style.display !== 'none' && child.tagName !== 'DIV') return false;
+             // Check if child has the search-match class or is visible
+             if (child.querySelector('.search-match')) return true;
+             return child.style.display !== 'none';
+          });
+
+          if (term !== "") {
+             // If searching and we have results, force expand (remove hidden)
+             if (hasVisibleChildren) {
+                 container.classList.remove('hidden');
+                 // Update chevron icon to "down"
+                 const prevHeader = container.previousElementSibling;
+                 if(prevHeader) {
+                    const iconSpan = prevHeader.querySelector('span:last-child');
+                    if(iconSpan) iconSpan.innerHTML = iconChevronDown;
+                 }
+             } else {
+                // Optionally hide empty categories entirely here if desired
+             }
+          }
+        });
+
+        // C. Clean up "Empty" Headers
+        // Loops through Category Headers and hides them if they have no visible modules
+        const categorySections = palette.querySelectorAll('#module-palette > div > div > div');
+        categorySections.forEach(sec => {
+            const modContainer = sec.querySelector('div.pl-2');
+            if(!modContainer) return;
+
+            // Count visible modules
+            const visibleMods = Array.from(modContainer.children).filter(m => m.style.display !== 'none');
+            sec.style.display = (visibleMods.length > 0 || term === "") ? 'block' : 'none';
+        });
+      });
+  }
+  // --- SEARCH LISTENER END ---
+
   // 4. Toggle Button Setup
   toggleBtn.innerHTML = iconCollapse;
   toggleBtn.addEventListener("click", toggleSettingsPanel);
 
   // 5. Event Listeners
-  document
-    .getElementById("project-id")
-    .addEventListener("input", generateBlueprint);
-  document
-    .getElementById("region")
-    .addEventListener("input", generateBlueprint);
+  document.getElementById("project-id").addEventListener("input", generateBlueprint);
+  document.getElementById("region").addEventListener("input", generateBlueprint);
 
   // Copy Button
   document.getElementById("generate-yaml-btn").addEventListener("click", () => {
