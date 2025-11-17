@@ -1048,13 +1048,18 @@ function generateBlueprint() {
       yaml += `    use: [${Array.from(dependencies).join(", ")}]\n`;
     }
 
-    // Write Settings
+// Write Settings
     if (node.settings && Object.keys(node.settings).length > 0) {
       yaml += `    settings:\n`;
       Object.entries(node.settings).forEach(([key, val]) => {
-        // Check if value looks like a number or boolean, otherwise quote string
-        const isNumber = !isNaN(val) && val.trim() !== "";
-        const isBool = val === "true" || val === "false";
+        // FIX: Convert to String safely before checking content to prevent crashes on real Numbers/Booleans
+        const strVal = String(val);
+
+        // 1. Check if it is a number (or looks like one)
+        const isNumber = !isNaN(val) && strVal.trim() !== "";
+
+        // 2. Check if it is a boolean (or looks like one)
+        const isBool = strVal === "true" || strVal === "false";
 
         if (isNumber || isBool) {
           yaml += `      ${key}: ${val}\n`;
@@ -1187,7 +1192,7 @@ function toggleSettingsPanel() {
   // Force re-render of connections after layout change
   renderConnections();
 }
-// --- INITIALIZATION ---
+
 // --- INITIALIZATION ---
 window.onload = function () {
   // 1. Generate a new unique name on load
@@ -1359,6 +1364,7 @@ function loadBlueprintFromData(data) {
 
     if (def) {
       // 2. Create the Node
+// 2. Create the Node
       blueprintState.nodes[mod.id] = {
         id: mod.id,
         name: def.name, // Visual name from library
@@ -1370,6 +1376,8 @@ function loadBlueprintFromData(data) {
         x: 0, // Will calculate later
         y: 0,
         isExpanded: false,
+        // Load settings from YAML, or default to empty object
+        settings: mod.settings || {},
         inject_module_id: def.inject_module_id,
         has_to_be_used: def.has_to_be_used,
       };
