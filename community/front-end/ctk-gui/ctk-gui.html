@@ -5,6 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cluster Toolkit Blueprint Editor</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       .node-handle {
@@ -109,6 +110,7 @@
   </head>
   <body class="bg-gray-50">
     <div class="h-16 bg-white shadow-md flex items-center px-6">
+      <img src="logo.svg" alt="Cluster Toolkit Logo" class="h-8 w-8 mr-3" />
       <h1 class="text-2xl font-bold text-indigo-700">Blueprint DAG Editor</h1>
       <span class="ml-4 text-sm text-gray-500 hidden md:inline"
         >Visualizing Infrastructure-as-Code Dependencies</span
@@ -220,26 +222,51 @@
         id="blueprint-canvas-container"
         ondrop="dropNode(event)"
         ondragover="allowDrop(event)"
+        class="relative overflow-hidden bg-white"
       >
-        <svg id="connection-svg">
-          <!-- Arrowhead Marker Definition -->
-          <defs>
-            <marker
-              id="arrowhead"
-              viewBox="0 0 10 10"
-              refX="8"
-              refY="5"
-              markerWidth="6"
-              markerHeight="6"
-              orient="auto"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="#4f46e5" />
-            </marker>
-          </defs>
-        </svg>
-        <!-- Nodes will be injected here by JS -->
+        <div id="canvas-world" class="absolute inset-0 origin-top-left transition-transform duration-75 ease-out w-full h-full">
+          <svg id="connection-svg" class="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+            <!-- Arrowhead Marker Definition -->
+            <defs>
+              <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#4f46e5" />
+              </marker>
+            </defs>
+          </svg>
+          <!-- Nodes will be injected here by JS -->
+        </div>
+        
+        <!-- Zoom Controls -->
+        <div
+          class="absolute bottom-4 left-4 flex flex-col space-y-2 bg-white p-2 rounded-lg shadow-md border border-gray-200 z-10">
+          <button id="zoom-in-btn" class="p-1 hover:bg-gray-100 rounded" title="Zoom In">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" x2="16.65" y1="21" y2="16.65" />
+              <line x1="11" x2="11" y1="8" y2="14" />
+              <line x1="8" x2="14" y1="11" y2="11" />
+            </svg>
+          </button>
+          <button id="zoom-reset-btn" class="p-1 hover:bg-gray-100 rounded" title="Reset Zoom">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+          </button>
+          <button id="zoom-out-btn" class="p-1 hover:bg-gray-100 rounded" title="Zoom Out">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" x2="16.65" y1="21" y2="16.65" />
+              <line x1="8" x2="14" y1="11" y2="11" />
+            </svg>
+          </button>
+        </div>
+
         <p
-          class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-gray-400 text-xl font-light pointer-events-none"
+          class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-gray-400 text-xl font-light pointer-events-none select-none"
         >
           Drag modules here to start building your blueprint.
         </p>
@@ -267,6 +294,22 @@
 
         <div id="settings-content" class="flex flex-col flex-grow">
           <div id="blueprint-vars" class="mb-6">
+            <div id="deployment-groups-section" class="mb-6">
+              <h3 class="font-medium text-gray-600 mb-2">Deployment Groups</h3>
+              <div id="groups-container" class="space-y-2">
+                <!-- Groups will be rendered here -->
+              </div>
+              <button id="add-group-btn"
+                class="w-full mt-2 py-1.5 px-3 text-sm font-medium text-indigo-700 border border-indigo-300 rounded-lg hover:bg-indigo-50 transition duration-150 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14" />
+                  <path d="M12 5v14" />
+                </svg>
+                <span class="ml-1">Add Group</span>
+              </button>
+            </div>
+
             <h3 class="font-medium text-gray-600 mb-2">Default Variables</h3>
             <input
               type="text"
@@ -311,7 +354,19 @@
             </button>
           </div>
 
-          <h3 class="font-medium text-gray-600 mb-2">Generated YAML Output</h3>
+          <div class="flex justify-between items-center mb-2">
+            <h3 class="font-medium text-gray-600">Generated YAML Output</h3>
+            <button id="expand-output-btn" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
+                <path d="M15 3h6v6" />
+                <path d="M9 21H3v-6" />
+                <path d="M21 3l-7 7" />
+                <path d="M3 21l7-7" />
+              </svg>
+              Expand
+            </button>
+          </div>
           <textarea
             id="yaml-output"
             readonly
@@ -344,6 +399,33 @@
           >
             Delete
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Output Modal -->
+    <div id="output-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-[60]">
+      <div class="bg-white rounded-xl shadow-2xl w-3/4 h-3/4 flex flex-col overflow-hidden">
+        <div class="flex justify-between items-center p-4 border-b bg-gray-50">
+          <h3 class="text-lg font-bold text-gray-800">Full YAML Output</h3>
+          <div class="flex space-x-2">
+            <button id="copy-output-btn"
+              class="px-3 py-1 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition">
+              Copy to Clipboard
+            </button>
+            <button id="close-output-btn"
+              class="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-200 transition">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="flex-grow p-0">
+          <textarea id="modal-yaml-output" readonly
+            class="w-full h-full p-4 font-mono text-sm resize-none focus:outline-none" spellcheck="false"></textarea>
         </div>
       </div>
     </div>

@@ -87,6 +87,7 @@ let blueprintState = {
   nodes: {}, // { nodeId: { id, name, category, sourcePrefix, x, y, inputs, outputs } }
   connections: [], // [{ sourceNodeId, sourceOutput, targetNodeId, targetInput }]
   customVars: [], // Array to hold user-defined variables: [{ key: 'custom_ip', value: '10.0.0.1' }]
+  groups: [{ id: "primary", name: "primary" }], // Default group
 };
 
 // Drag/Connection State
@@ -101,6 +102,7 @@ let connectionData = {
 
 // DOM Elements
 const canvasContainer = document.getElementById("blueprint-canvas-container");
+const canvasWorld = document.getElementById("canvas-world");
 const svg = document.getElementById("connection-svg");
 const yamlOutput = document.getElementById("yaml-output");
 const msgBox = document.getElementById("message-box");
@@ -121,9 +123,127 @@ const settingsHeader = document.getElementById("settings-header");
 // NEW VARIABLE ELEMENTS
 const addVarBtn = document.getElementById("add-var-btn");
 const customVarsContainer = document.getElementById("custom-vars-container");
+const groupsContainer = document.getElementById("groups-container");
+const addGroupBtn = document.getElementById("add-group-btn");
+
+// OUTPUT MODAL ELEMENTS
+const expandOutputBtn = document.getElementById("expand-output-btn");
+const outputModal = document.getElementById("output-modal");
+const modalYamlOutput = document.getElementById("modal-yaml-output");
+const closeOutputBtn = document.getElementById("close-output-btn");
+const copyOutputBtn = document.getElementById("copy-output-btn");
+
+// ZOOM CONTROLS
+const zoomInBtn = document.getElementById("zoom-in-btn");
+const zoomOutBtn = document.getElementById("zoom-out-btn");
+const zoomResetBtn = document.getElementById("zoom-reset-btn");
 
 let nodeIdCounter = {};
 let settingsPanelCollapsed = false; // Initial state: open
+
+// --- VIEWPORT STATE (Pan & Zoom) ---
+let viewportState = {
+  x: 0,
+  y: 0,
+  scale: 1,
+};
+
+function updateCanvasTransform() {
+  canvasWorld.style.transform = `translate(${viewportState.x}px, ${viewportState.y}px) scale(${viewportState.scale})`;
+  // Update grid background size/position if we had one, but for now just the transform
+}
+
+// --- PAN & ZOOM LISTENERS ---
+
+// 1. Panning (Middle Click or Space + Left Click or just Left Click on background)
+// Decision: Left Click on background = Pan
+canvasContainer.addEventListener("mousedown", (e) => {
+  // If clicking on a node or handle, don't pan
+  if (e.target.closest(".module-node") || e.target.closest(".node-handle")) return;
+
+  e.preventDefault(); // Prevent text selection
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const initialViewX = viewportState.x;
+  const initialViewY = viewportState.y;
+
+  function onMouseMove(e) {
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    viewportState.x = initialViewX + dx;
+    viewportState.y = initialViewY + dy;
+    updateCanvasTransform();
+  }
+
+  function onMouseUp() {
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+  }
+
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseup", onMouseUp);
+});
+
+// 2. Zooming (Wheel)
+canvasContainer.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const zoomSensitivity = 0.001;
+  const delta = -e.deltaY * zoomSensitivity;
+  const newScale = Math.min(Math.max(0.1, viewportState.scale + delta), 5); // Min 0.1x, Max 5x
+
+  // Zoom towards mouse pointer
+  const rect = canvasContainer.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  // Calculate world coordinates of mouse before zoom
+  const worldX = (mouseX - viewportState.x) / viewportState.scale;
+  const worldY = (mouseY - viewportState.y) / viewportState.scale;
+
+  // Apply new scale
+  viewportState.scale = newScale;
+
+  // Calculate new viewport position to keep mouse at same world coordinates
+  viewportState.x = mouseX - worldX * newScale;
+  viewportState.y = mouseY - worldY * newScale;
+
+  updateCanvasTransform();
+}, { passive: false });
+
+// 3. Zoom Buttons
+zoomInBtn.addEventListener("click", () => {
+  viewportState.scale = Math.min(viewportState.scale + 0.2, 5);
+  updateCanvasTransform();
+});
+zoomOutBtn.addEventListener("click", () => {
+  viewportState.scale = Math.max(viewportState.scale - 0.2, 0.1);
+  updateCanvasTransform();
+});
+zoomResetBtn.addEventListener("click", () => {
+  viewportState.x = 0;
+  viewportState.y = 0;
+  viewportState.scale = 1;
+  updateCanvasTransform();
+});
+
+// --- OUTPUT MODAL LISTENERS ---
+expandOutputBtn.addEventListener("click", () => {
+  modalYamlOutput.value = yamlOutput.value;
+  outputModal.classList.remove("hidden");
+});
+
+closeOutputBtn.addEventListener("click", () => {
+  outputModal.classList.add("hidden");
+});
+
+copyOutputBtn.addEventListener("click", () => {
+  modalYamlOutput.select();
+  document.execCommand("copy"); // Fallback
+  // navigator.clipboard.writeText(modalYamlOutput.value); // Modern way
+  const originalText = copyOutputBtn.textContent;
+  copyOutputBtn.textContent = "Copied!";
+  setTimeout(() => copyOutputBtn.textContent = originalText, 2000);
+});
 
 // Lucide Icons for toggling
 const iconCollapse = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevrons-left"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>`;
@@ -158,12 +278,41 @@ function getConnectionPointPosition(nodeId, type) {
   if (!connEl) return { x: 0, y: 0 };
 
   const rect = connEl.getBoundingClientRect();
-  const canvasRect = canvasContainer.getBoundingClientRect();
+  const worldRect = canvasWorld.getBoundingClientRect();
 
-  return {
-    x: rect.left + rect.width / 2 - canvasRect.left,
-    y: rect.top + rect.height / 2 - canvasRect.top,
-  };
+  // Calculate relative to canvasWorld, taking scale into account is tricky if we use getBoundingClientRect directly
+  // But since the SVG is INSIDE canvasWorld, we want coordinates relative to the SVG origin (which is 0,0 of canvasWorld)
+
+  // The logic here needs to be: Center of handle relative to canvasWorld's top-left
+  // Since canvasWorld is transformed, getBoundingClientRect returns the transformed screen coordinates.
+  // We need to reverse the transform to get the internal "world" coordinates.
+
+  // Actually, simpler:
+  // Node Left/Top are already in world coordinates (node.x, node.y).
+  // We just need to add the offset of the handle within the node.
+
+  // Let's assume standard handle positions for now to avoid complex DOM math on transformed elements
+  // Input handle: Left side (x=0), Center Y (height/2)
+  // Output handle: Right side (x=width), Center Y (height/2)
+
+  // However, node width/height might vary.
+  // Let's use offsetLeft/offsetTop relative to the node element
+
+  const nodeRect = nodeEl.getBoundingClientRect(); // Transformed screen rect
+  const handleRect = connEl.getBoundingClientRect(); // Transformed screen rect
+
+  // Calculate center of handle in screen space
+  const screenX = handleRect.left + handleRect.width / 2;
+  const screenY = handleRect.top + handleRect.height / 2;
+
+  // Convert screen space to world space
+  // worldX = (screenX - canvasContainerRect.left - viewportState.x) / viewportState.scale
+  const containerRect = canvasContainer.getBoundingClientRect();
+
+  const worldX = (screenX - containerRect.left - viewportState.x) / viewportState.scale;
+  const worldY = (screenY - containerRect.top - viewportState.y) / viewportState.scale;
+
+  return { x: worldX, y: worldY };
 }
 
 function showMessage(message, type = "warning") {
@@ -289,6 +438,87 @@ function renderCustomVars() {
     customVarsContainer.appendChild(varDiv);
   });
 }
+
+// --- GROUP MANAGEMENT FUNCTIONS ---
+
+function renderGroups() {
+  groupsContainer.innerHTML = "";
+  blueprintState.groups.forEach((group, index) => {
+    const groupDiv = document.createElement("div");
+    groupDiv.className = "flex items-center space-x-2";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = group.name;
+    input.className =
+      "flex-grow p-1.5 border rounded text-sm focus:ring-indigo-500 focus:border-indigo-500 font-mono";
+    input.addEventListener("change", (e) =>
+      updateGroupName(group.id, e.target.value)
+    );
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "text-red-500 hover:text-red-700 transition p-1";
+    removeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+
+    // Prevent removing the last group
+    if (blueprintState.groups.length > 1) {
+      removeBtn.addEventListener("click", () => removeGroup(group.id));
+    } else {
+      removeBtn.classList.add("opacity-50", "cursor-not-allowed");
+    }
+
+    groupDiv.appendChild(input);
+    groupDiv.appendChild(removeBtn);
+    groupsContainer.appendChild(groupDiv);
+  });
+}
+
+function addGroup() {
+  const id = `group-${Date.now()}`;
+  blueprintState.groups.push({
+    id,
+    name: `group-${blueprintState.groups.length + 1}`,
+  });
+  renderGroups();
+  generateBlueprint();
+  // Re-render nodes so their dropdowns update
+  Object.values(blueprintState.nodes).forEach(renderModuleNode);
+}
+
+function removeGroup(groupId) {
+  if (blueprintState.groups.length <= 1) return;
+
+  // Reassign nodes to the first remaining group
+  const remainingGroup = blueprintState.groups.find((g) => g.id !== groupId);
+  Object.values(blueprintState.nodes).forEach((node) => {
+    if (node.groupId === groupId) {
+      node.groupId = remainingGroup.id;
+    }
+  });
+
+  blueprintState.groups = blueprintState.groups.filter((g) => g.id !== groupId);
+  renderGroups();
+  Object.values(blueprintState.nodes).forEach(renderModuleNode);
+  generateBlueprint();
+}
+
+function updateGroupName(groupId, newName) {
+  const group = blueprintState.groups.find((g) => g.id === groupId);
+  if (group) {
+    group.name = newName;
+    generateBlueprint();
+    // Re-render nodes so their dropdowns update (if we show group name there)
+    Object.values(blueprintState.nodes).forEach(renderModuleNode);
+  }
+}
+
+// Global function for the node dropdown
+window.updateNodeGroup = function (nodeId, newGroupId) {
+  if (blueprintState.nodes[nodeId]) {
+    blueprintState.nodes[nodeId].groupId = newGroupId;
+    generateBlueprint();
+  }
+};
 
 // --- RENDER FUNCTIONS ---
 function renderModulePalette() {
@@ -473,7 +703,7 @@ function renderModuleNode(node) {
     nodeEl.id = node.id;
     // Drag listener on the main container
     nodeEl.addEventListener("mousedown", (e) => startDrag(e, node.id));
-    canvasContainer.appendChild(nodeEl);
+    canvasWorld.appendChild(nodeEl);
   } else {
     if (nodeEl.dataset.state === stateSignature) {
       nodeEl.style.left = `${node.x}px`;
@@ -565,6 +795,12 @@ function renderModuleNode(node) {
   } text-xs border-t pt-2 mt-2 overflow-y-auto custom-scrollbar bg-gray-50 rounded border-gray-100 border" style="max-height: 300px;">
             <div class="grid grid-cols-2 gap-2">
                <div class="border-r border-gray-200 pr-1">
+                   <div class="mb-2">
+                       <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Group</label>
+                       <select onchange="updateNodeGroup('${node.id}', this.value)" class="w-full p-1 text-xs border rounded bg-white focus:ring-indigo-500 focus:border-indigo-500">
+                           ${blueprintState.groups.map(g => `<option value="${g.id}" ${node.groupId === g.id ? 'selected' : ''}>${g.name}</option>`).join('')}
+                       </select>
+                   </div>
                    <span class="font-semibold block mb-1 text-gray-700 sticky top-0 bg-gray-50">Inputs:</span>
                    ${inputListHTML}
                </div>
@@ -701,25 +937,34 @@ function allowDrop(e) {
 function dropNode(e) {
   e.preventDefault();
   const rect = canvasContainer.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+
+  // Screen coordinates relative to container
+  const screenX = e.clientX - rect.left;
+  const screenY = e.clientY - rect.top;
+
+  // Convert to World Coordinates
+  const worldX = (screenX - viewportState.x) / viewportState.scale;
+  const worldY = (screenY - viewportState.y) / viewportState.scale;
 
   if (draggedModule) {
     const newNodeId = getNewNodeId(draggedModule.id);
     const newNode = {
       id: newNodeId,
-      name: draggedModule.id,
+      name: draggedModule.name, // Visual name
+      moduleId: draggedModule.id, // Technical ID for source path
       category: draggedModule.category,
+      kind: draggedModule.category === 'packer' ? 'packer' : undefined, // Auto-set kind for packer modules
       icon: draggedModule.icon,
       sourcePrefix: draggedModule.sourcePrefix, // NEW: Store core/community
-      x: x - 50, // Offset for better centering on cursor
-      y: y - 20, // Offset for better centering on cursor
+      x: worldX - 50, // Offset for better centering on cursor
+      y: worldY - 20, // Offset for better centering on cursor
       inputs: draggedModule.inputs,
       outputs: draggedModule.outputs,
       isExpanded: false,
       settings: {}, // Initialize empty settings
       inject_module_id: draggedModule.inject_module_id,
-      has_to_be_used: draggedModule.has_to_be_used
+      has_to_be_used: draggedModule.has_to_be_used,
+      groupId: blueprintState.groups[0].id // Default to first group
     };
     blueprintState.nodes[newNodeId] = newNode;
     renderModuleNode(newNode);
@@ -743,13 +988,15 @@ function startDrag(e, nodeId) {
   if (connectionData.isConnecting) return;
 
   const nodeEl = document.getElementById(nodeId);
-  const rect = nodeEl.getBoundingClientRect();
+  const canvasRect = canvasContainer.getBoundingClientRect();
+  const mouseWorldX = (e.clientX - canvasRect.left - viewportState.x) / viewportState.scale;
+  const mouseWorldY = (e.clientY - canvasRect.top - viewportState.y) / viewportState.scale;
 
   dragData.isDragging = true;
   dragData.currentId = nodeId;
-  // Calculate offset (where mouse hits the node)
-  dragData.offsetX = e.clientX - rect.left;
-  dragData.offsetY = e.clientY - rect.top;
+  // Calculate offset in world space
+  dragData.offsetWorldX = mouseWorldX - blueprintState.nodes[nodeId].x;
+  dragData.offsetWorldY = mouseWorldY - blueprintState.nodes[nodeId].y;
 
   // Update node style to be on top
   nodeEl.style.zIndex = 10;
@@ -766,20 +1013,22 @@ function handleDrag(e) {
 
   const node = blueprintState.nodes[dragData.currentId];
   const canvasRect = canvasContainer.getBoundingClientRect();
+  const mouseWorldX = (e.clientX - canvasRect.left - viewportState.x) / viewportState.scale;
+  const mouseWorldY = (e.clientY - canvasRect.top - viewportState.y) / viewportState.scale;
 
-  // Calculate new position relative to canvas
-  let newX = e.clientX - canvasRect.left - dragData.offsetX;
-  let newY = e.clientY - canvasRect.top - dragData.offsetY;
+  // Calculate new position in world space
+  let newX = mouseWorldX - dragData.offsetWorldX;
+  let newY = mouseWorldY - dragData.offsetWorldY;
 
   // console.log({ newX, newY }); // DEBUGGING
 
-  // Clamp to canvas boundaries (optional, but good practice)
-  newX = Math.max(0, newX);
-  newY = Math.max(0, newY);
+  // Removed clamping to allow infinite canvas
+  // newX = Math.max(0, newX);
+  // newY = Math.max(0, newY);
 
   const nodeEl = document.getElementById(dragData.currentId);
-  newX = Math.min(newX, canvasRect.width - nodeEl.offsetWidth);
-  newY = Math.min(newY, canvasRect.height - nodeEl.offsetHeight);
+  // newX = Math.min(newX, canvasRect.width - nodeEl.offsetWidth);
+  // newY = Math.min(newY, canvasRect.height - nodeEl.offsetHeight);
 
   // Update state and DOM
   node.x = newX;
@@ -831,9 +1080,12 @@ function updateConnectionLine(e) {
   if (!connectionData.isConnecting) return;
   const canvasRect = canvasContainer.getBoundingClientRect();
 
+  const mouseWorldX = (e.clientX - canvasRect.left - viewportState.x) / viewportState.scale;
+  const mouseWorldY = (e.clientY - canvasRect.top - viewportState.y) / viewportState.scale;
+
   connectionData.currentPoint = {
-    x: e.clientX - canvasRect.left,
-    y: e.clientY - canvasRect.top,
+    x: mouseWorldX,
+    y: mouseWorldY,
   };
 }
 
@@ -1010,66 +1262,102 @@ function generateBlueprint() {
   // 3. Add Custom User Variables
   blueprintState.customVars.forEach((v) => {
     if (v.key && v.value) {
-      yaml += `  ${v.key}: "${v.value}"\n`;
+      // Check if value is complex (starts with { or [) to try parsing it, or just treat as string
+      // But customVars are usually simple strings from the UI inputs.
+      // However, if we loaded from YAML, they might be objects if we supported that.
+      // For now, let's assume they are strings or we try to parse JSON if it looks like it.
+      let valToUse = v.value;
+      // If v.value is an object (from import), serialize it
+      if (typeof v.value === 'object') {
+        const jsonStr = JSON.stringify(v.value, null, 2);
+        const indentedJson = jsonStr.split('\n').map((line, index) => {
+          return index === 0 ? line : `    ${line}`; // Indent for vars level (2 spaces + 2 for key) -> actually vars is 2 spaces, so key is at 2. Value starts after key.
+          // If multiline, subsequent lines need to align.
+          // vars:
+          //   key:
+          //     val
+        }).join('\n    '); // Join with indentation
+        yaml += `  ${v.key}: ${indentedJson}\n`;
+      } else {
+        yaml += `  ${v.key}: "${v.value}"\n`;
+      }
     }
   });
 
   yaml += "\ndeployment_groups:\n";
-  yaml += "- group: primary\n";
-  yaml += "  modules:\n";
 
-  // 4. Generate Modules List
   const nodes = Object.values(blueprintState.nodes);
 
-  if (nodes.length === 0) {
-    yaml += "    # No modules added yet\n";
-  }
+  blueprintState.groups.forEach((group) => {
+    yaml += `- group: ${group.name}\n`;
+    yaml += "  modules:\n";
 
-  nodes.forEach((node) => {
-    const dependencies = new Set();
+    const groupNodes = nodes.filter((n) => n.groupId === group.id);
 
-    // Check connections to build the 'use' list
-    blueprintState.connections.forEach((conn) => {
-      if (conn.targetNodeId === node.id) {
-        dependencies.add(conn.sourceNodeId);
-      }
-    });
-
-    // Determine source path (core vs community)
-    const sourcePathPrefix =
-      node.sourcePrefix === "community" ? "community/modules" : "modules";
-
-    // Write Module Block
-    yaml += `  - id: ${node.id}\n`;
-    yaml += `    source: ${sourcePathPrefix}/${node.category}/${node.name}\n`;
-
-    // Write Dependencies
-    if (dependencies.size > 0) {
-      yaml += `    use: [${Array.from(dependencies).join(", ")}]\n`;
+    if (groupNodes.length === 0) {
+      yaml += "    # No modules in this group\n";
     }
 
-// Write Settings
-    if (node.settings && Object.keys(node.settings).length > 0) {
-      yaml += `    settings:\n`;
-      Object.entries(node.settings).forEach(([key, val]) => {
-        // FIX: Convert to String safely before checking content to prevent crashes on real Numbers/Booleans
-        const strVal = String(val);
+    groupNodes.forEach((node) => {
+      const dependencies = new Set();
 
-        // 1. Check if it is a number (or looks like one)
-        const isNumber = !isNaN(val) && strVal.trim() !== "";
-
-        // 2. Check if it is a boolean (or looks like one)
-        const isBool = strVal === "true" || strVal === "false";
-
-        if (isNumber || isBool) {
-          yaml += `      ${key}: ${val}\n`;
-        } else {
-          yaml += `      ${key}: "${val}"\n`;
+      // Check connections to build the 'use' list
+      blueprintState.connections.forEach((conn) => {
+        if (conn.targetNodeId === node.id) {
+          dependencies.add(conn.sourceNodeId);
         }
       });
-    }
 
-    yaml += `\n`;
+      // Determine source path (core vs community)
+      const sourcePathPrefix =
+        node.sourcePrefix === "community" ? "community/modules" : "modules";
+
+      // Write Module Block
+      // Use the stored moduleId if available, otherwise fallback to name (for backward compatibility or if name IS the id)
+      const modId = node.moduleId || node.name;
+      yaml += `  - id: ${node.id}\n`;
+      yaml += `    source: ${sourcePathPrefix}/${node.category}/${modId}\n`;
+      if (node.kind) {
+        yaml += `    kind: ${node.kind}\n`;
+      }
+
+      // Write Dependencies
+      if (dependencies.size > 0) {
+        yaml += `    use: [${Array.from(dependencies).join(", ")}]\n`;
+      }
+
+      // Write Settings
+      if (node.settings && Object.keys(node.settings).length > 0) {
+        yaml += `    settings:\n`;
+        Object.entries(node.settings).forEach(([key, val]) => {
+          // FIX: Convert to String safely before checking content to prevent crashes on real Numbers/Booleans
+          const strVal = String(val);
+
+          // 1. Check if it is a number (or looks like one)
+          const isNumber = !isNaN(val) && strVal.trim() !== "";
+
+          // 2. Check if it is a boolean (or looks like one)
+          const isBool = strVal === "true" || strVal === "false";
+
+          if (isNumber || isBool) {
+            yaml += `      ${key}: ${val}\n`;
+          } else if (typeof val === 'object') {
+            // Handle Objects and Arrays
+            const jsonStr = JSON.stringify(val, null, 2); // Pretty print with 2 spaces
+            // Indent the JSON string to match YAML indentation (6 spaces for settings children)
+            const indentedJson = jsonStr.split('\n').map((line, index) => {
+              return index === 0 ? line : `      ${line}`;
+            }).join('\n');
+
+            yaml += `      ${key}: ${indentedJson}\n`;
+          } else {
+            yaml += `      ${key}: "${val}"\n`;
+          }
+        });
+      }
+
+      yaml += `\n`;
+    });
   });
 
   // 5. Update the Text Area
@@ -1290,6 +1578,10 @@ window.onload = function () {
   addVarBtn.addEventListener("click", addVariable);
   renderCustomVars();
 
+  // Groups
+  addGroupBtn.addEventListener("click", addGroup);
+  renderGroups();
+
   // Window Resize
   window.addEventListener("resize", () => {
     if (Object.keys(blueprintState.nodes).length > 0) {
@@ -1333,6 +1625,7 @@ function loadBlueprintFromData(data) {
   blueprintState.nodes = {};
   blueprintState.connections = [];
   blueprintState.customVars = [];
+  blueprintState.groups = [];
   nodeIdCounter = {};
 
   // A. Load Variables
@@ -1353,48 +1646,59 @@ function loadBlueprintFromData(data) {
   }
 
   // B. Load Modules
-  const modules = data.deployment_groups?.[0]?.modules || [];
+  const groups = data.deployment_groups || [];
 
-  // Helper to track hierarchy for auto-layout
-  const nodeLevels = {};
+  if (groups.length === 0) {
+    // Fallback if no groups found
+    blueprintState.groups.push({ id: "primary", name: "primary" });
+  }
 
-  modules.forEach((mod) => {
-    // 1. Find the Module Definition in MODULES_LIST based on 'source'
-    const def = findModuleDefinition(mod.source);
+  groups.forEach((groupData, groupIndex) => {
+    const groupId = `group-${groupIndex}-${Date.now()}`;
+    blueprintState.groups.push({ id: groupId, name: groupData.group });
 
-    if (def) {
-      // 2. Create the Node
-// 2. Create the Node
-      blueprintState.nodes[mod.id] = {
-        id: mod.id,
-        name: def.name, // Visual name from library
-        category: def.category,
-        icon: def.icon,
-        sourcePrefix: def.sourcePrefix,
-        inputs: def.inputs,
-        outputs: def.outputs,
-        x: 0, // Will calculate later
-        y: 0,
-        isExpanded: false,
-        // Load settings from YAML, or default to empty object
-        settings: mod.settings || {},
-        inject_module_id: def.inject_module_id,
-        has_to_be_used: def.has_to_be_used,
-      };
+    const modules = groupData.modules || [];
 
-      // 3. Record Connections
-      if (mod.use) {
-        mod.use.forEach((sourceId) => {
-          // In YAML, 'use' usually points to the Node ID
-          blueprintState.connections.push({
-            sourceNodeId: sourceId,
-            targetNodeId: mod.id,
+    modules.forEach((mod) => {
+      // 1. Find the Module Definition in MODULES_LIST based on 'source'
+      const def = findModuleDefinition(mod.source);
+
+      if (def) {
+        // 2. Create the Node
+        blueprintState.nodes[mod.id] = {
+          id: mod.id,
+          name: def.name, // Visual name from library
+          moduleId: def.id, // Technical ID for source path
+          category: def.category,
+          icon: def.icon,
+          sourcePrefix: def.sourcePrefix,
+          inputs: def.inputs,
+          outputs: def.outputs,
+          x: 0, // Will calculate later
+          y: 0,
+          isExpanded: false,
+          // Load settings from YAML, or default to empty object
+          settings: mod.settings || {},
+          inject_module_id: def.inject_module_id,
+          has_to_be_used: def.has_to_be_used,
+          groupId: groupId, // Assign to this group
+          kind: mod.kind, // Preserve kind (e.g. packer)
+        };
+
+        // 3. Record Connections
+        if (mod.use) {
+          mod.use.forEach((sourceId) => {
+            // In YAML, 'use' usually points to the Node ID
+            blueprintState.connections.push({
+              sourceNodeId: sourceId,
+              targetNodeId: mod.id,
+            });
           });
-        });
+        }
+      } else {
+        console.warn(`Could not find module definition for: ${mod.source}`);
       }
-    } else {
-      console.warn(`Could not find module definition for: ${mod.source}`);
-    }
+    });
   });
 
   // C. Auto-Layout (Simple Topological Layering)
@@ -1414,7 +1718,7 @@ function loadBlueprintFromData(data) {
     .querySelector("#blueprint-canvas-container p")
     .classList.add("hidden");
 
-  showMessage(`Imported ${modules.length} modules successfully.`, "success");
+  showMessage(`Imported ${Object.keys(blueprintState.nodes).length} modules successfully.`, "success");
 }
 
 // 3. Helper: Find Module in Library
@@ -1497,3 +1801,37 @@ function performAutoLayout() {
     });
   });
 }
+
+// --- INITIALIZATION ---
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("Initializing Blueprint Editor...");
+
+  // Check MODULES_LIST
+  if (typeof MODULES_LIST !== 'undefined') {
+    console.log("MODULES_LIST found:", Object.keys(MODULES_LIST));
+    try {
+      renderModulePalette();
+      console.log("renderModulePalette executed.");
+    } catch (e) {
+      console.error("Error rendering palette:", e);
+      showMessage(`Error rendering palette: ${e.message}`, "error");
+    }
+  } else {
+    console.error("MODULES_LIST is not defined.");
+    showMessage("Error: MODULES_LIST is not defined. Check ctk-modules.js.", "error");
+  }
+
+  // Initial Render
+  try {
+    renderGroups();
+    renderCustomVars();
+    generateBlueprint();
+  } catch (e) {
+    console.error("Error during initial render:", e);
+  }
+
+  // Handle window resize
+  window.addEventListener('resize', () => {
+    renderConnections();
+  });
+});

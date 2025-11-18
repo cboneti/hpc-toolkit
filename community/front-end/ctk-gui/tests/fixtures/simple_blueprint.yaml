@@ -1,0 +1,11 @@
+blueprint_name: test-blueprint
+vars:
+  project_id: test-project
+  region: us-central1
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      network_name: test-network

@@ -1,5 +1,25 @@
 const MODULES_LIST = {
     "core": {
+        "packer": [
+            {
+                "id": "custom-image",
+                "name": "Custom Image",
+                "icon": "📦",
+                "inputs": [
+                    { "name": "disk_size", "required": false },
+                    { "name": "machine_type", "required": false },
+                    { "name": "source_image", "required": false },
+                    { "name": "source_image_family", "required": false },
+                    { "name": "source_image_project_id", "required": false },
+                    { "name": "image_family", "required": true },
+                    { "name": "omit_external_ip", "required": false },
+                    { "name": "metadata", "required": false }
+                ],
+                "outputs": [],
+                "inject_module_id": null,
+                "has_to_be_used": false
+            }
+        ],
         "compute": [
             {
                 "id": "gke-job-template",
