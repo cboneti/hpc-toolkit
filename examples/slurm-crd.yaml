@@ -43,20 +43,14 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  ####### CRD Startup Script #######
-  - id: crd_startup
-    source: modules/scripts/startup-script
+  ####### CRD Startup Script Generator #######
+  # We use the chrome-remote-desktop module with instance_count: 0
+  # to generate the correct startup script for the Slurm nodeset.
+  - id: crd_script_gen
+    source: community/modules/remote-desktop/chrome-remote-desktop
     settings:
-      runners:
-      - type: ansible-local
-        source: community/modules/remote-desktop/chrome-remote-desktop/scripts/configure-grid-drivers.yml
-        destination: /usr/local/ghpc/configure-grid-drivers.yml
-      - type: ansible-local
-        source: community/modules/remote-desktop/chrome-remote-desktop/scripts/configure-chrome-desktop.yml
-        destination: /usr/local/ghpc/configure-chrome-desktop.yml
-      - type: ansible-local
-        source: community/modules/remote-desktop/chrome-remote-desktop/scripts/disable-sleep.yml
-        destination: /usr/local/ghpc/disable-sleep.yml
+      instance_count: 0
+      install_nvidia_driver: true
 
   ####### CRD Nodeset #######
   - id: crd_nodeset
@@ -68,7 +62,7 @@ deployment_groups:
       guest_accelerator:
       - type: nvidia-tesla-t4-vws
         count: 1
-      startup_script: $(crd_startup.startup_script)
+      startup_script: $(crd_script_gen.startup_script)
 
   ####### CRD Partition #######
   - id: crd_partition
