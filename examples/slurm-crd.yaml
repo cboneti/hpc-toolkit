@@ -1,0 +1,99 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: slurm-crd
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: slurm-crd
+  region: us-central1
+  zone: us-central1-c
+  # Using an Ubuntu image compatible with both Slurm and CRD scripts
+  slurm_image:
+    family: slurm-gcp-6-11-ubuntu-2204-lts-nvidia-570
+    project: schedmd-slurm-public
+
+deployment_groups:
+- group: primary
+  modules:
+  ####### Network #######
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: slurm-crd-net
+      subnetwork_name: slurm-crd-subnet
+
+  ####### Storage #######
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      local_mount: /home
+
+  ####### CRD Startup Script #######
+  - id: crd_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: ansible-local
+        source: community/modules/remote-desktop/chrome-remote-desktop/scripts/configure-grid-drivers.yml
+        destination: /usr/local/ghpc/configure-grid-drivers.yml
+      - type: ansible-local
+        source: community/modules/remote-desktop/chrome-remote-desktop/scripts/configure-chrome-desktop.yml
+        destination: /usr/local/ghpc/configure-chrome-desktop.yml
+      - type: ansible-local
+        source: community/modules/remote-desktop/chrome-remote-desktop/scripts/disable-sleep.yml
+        destination: /usr/local/ghpc/disable-sleep.yml
+
+  ####### CRD Nodeset #######
+  - id: crd_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      instance_image: $(vars.slurm_image)
+      machine_type: n1-standard-8
+      guest_accelerator:
+      - type: nvidia-tesla-t4-vws
+        count: 1
+      startup_script: $(crd_startup.startup_script)
+
+  ####### CRD Partition #######
+  - id: crd_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [crd_nodeset]
+    settings:
+      partition_name: crd
+      is_default: true
+
+  ####### Slurm Login #######
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      instance_image: $(vars.slurm_image)
+      machine_type: n2-standard-4
+
+  ####### Slurm Controller #######
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - homefs
+    - crd_partition
+    - slurm_login
+    settings:
+      instance_image: $(vars.slurm_image)
+      machine_type: n2-standard-4
