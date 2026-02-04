@@ -1,0 +1,221 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: ibm-symphony
+
+vars:
+  project_id:  ## Set project id here
+  deployment_name: symphony1
+  region: us-central1
+  zone: us-central1-a
+
+  labels:
+    ghpc_blueprint: ibm-symphony
+
+  base_image:
+    family: hpc-rocky-linux-8 
+    project: cloud-hpc-image-public 
+
+  new_image:
+    family: $(vars.deployment_name)
+    project: $(vars.project_id)
+
+  master_machine_type: c2-standard-4
+  compute_machine_type: c2-standard-30
+  
+  disk_size_gb: 200
+  
+  metadata: # Workaround for https://github.com/GoogleCloudPlatform/cluster-toolkit/discussions/3243
+    VmDnsSetting: GlobalOnly
+
+  # Symphony specific variables
+  sym_installer: sym-7.3.2.0_x86_64.bin
+  sym_source_bucket: mybucket_jrt
+  sym_fixpack: sym-7.3.2.0_x86_64_build601711.tar.gz
+  sym_entitlement: sym_adv_entitlement.dat
+  sym_install_dir: /opt/ibm/symphony
+  admin_password: admin
+  
+  sym_pubsub_subscription: hf-gce-vm-events-sub
+  sym_pubsub_topic: hf-gce-vm-events
+  sym_sink_name: hf-gce-vm-events-sink
+
+  # Repo for remote resources
+  scientific_computing_examples_repo: https://raw.githubusercontent.com/GoogleCloudPlatform/scientific-computing-examples/main/ibm-symphony-on-gcp
+
+deployment_groups:
+- group: infrastructure
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: symphony-sa
+    source: modules/project/service-account
+    settings:
+      name: symphony-sa
+      project_roles:
+      - roles/logging.logWriter
+      - roles/monitoring.metricWriter
+      - roles/pubsub.publisher
+      - roles/pubsub.subscriber
+      - roles/storage.objectViewer
+
+  - id: sym-topic
+    source: github.com/GoogleCloudPlatform/scientific-computing-examples//ibm-symphony-on-gcp/modules/pubsub_topic?ref=main
+    settings:
+      topic_name: $(vars.sym_pubsub_topic)
+
+  - id: sym-subscription
+    source: github.com/GoogleCloudPlatform/scientific-computing-examples//ibm-symphony-on-gcp/modules/pubsub_subscription?ref=main
+    use:
+    - sym-topic
+    settings:
+      subscription_name: $(vars.sym_pubsub_subscription)
+
+  - id: sym-sink
+    source: github.com/GoogleCloudPlatform/scientific-computing-examples//ibm-symphony-on-gcp/modules/logging_sink?ref=main
+    use:
+    - sym-topic
+    - sym-subscription
+    settings:
+      sink_name: $(vars.sym_sink_name)
+      log_filter: |
+        logName="projects/$(vars.project_id)/logs/cloudaudit.googleapis.com%2Factivity" 
+        resource.type=("gce_instance_group_manager" OR "gce_instance" ) 
+        protoPayload.methodName=( 
+          "v1.compute.instanceGroupManagers.createInstances" 
+          OR "v1.compute.instanceGroupManagers.deleteInstances" 
+          OR "v1.compute.instances.delete" 
+        )
+
+  - id: sym-image-setup
+    source: modules/scripts/startup-script
+    settings:
+      install_cloud_ops_agent: true
+      runners:
+      - type: shell
+        destination: setup_symphony.sh
+        content: |
+          #!/bin/bash
+          set -e
+          REPO="$(vars.scientific_computing_examples_repo)"
+          mkdir -p /tmp/Symphony
+          for f in hostProviderPlugins.json hostProviders.json hostRequestors.json; do
+            curl -fsSL "$REPO/resources/$f" -o "/tmp/Symphony/$f"
+          done
+          curl -fsSL "$REPO/scripts/install_symphony.sh" | bash -s -- $(vars.sym_installer) $(vars.sym_fixpack) $(vars.sym_entitlement) $(vars.sym_install_dir) $(vars.sym_source_bucket)
+          curl -fsSL "$REPO/scripts/hf-gce_symphony.sh" | bash -s -- $(vars.sym_install_dir) $(vars.project_id)
+
+  - id: sym-compute-script
+    source: modules/scripts/startup-script
+    settings:
+      install_cloud_ops_agent: true
+      runners:
+      - type: shell
+        destination: sym_compute.sh
+        content: |
+          #!/bin/bash
+          curl -fsSL "$(vars.scientific_computing_examples_repo)/scripts/sym_compute.sh" | bash -s -- $(vars.deployment_name)-master-0 $(vars.sym_install_dir)
+
+- group: image
+  modules:
+  - id: custom-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - network
+    - sym-image-setup
+    settings:
+      omit_external_ip: false
+      source_image_family: $(vars.base_image.family)
+      source_image_project_id: [$(vars.base_image.project)]
+      disk_size: $(vars.disk_size_gb)
+      disk_type: pd-ssd
+      image_family: $(vars.new_image.family)
+      machine_type: c2-standard-4
+      state_timeout: 15m
+
+- group: compute-mig
+  modules:
+  - id: sym-mig-template
+    use: 
+    - network
+    - sym-compute-script
+    - symphony-sa
+    source: github.com/GoogleCloudPlatform/scientific-computing-examples//ibm-symphony-on-gcp/modules/instance_template?ref=main
+    settings:
+      source_image_family: $(vars.new_image.family)
+      source_image_project: $(vars.new_image.project)
+      name_prefix: $(vars.deployment_name)-compute
+      machine_type: $(vars.compute_machine_type)
+      advanced_machine_features:
+        threads_per_core: null
+
+  - id: sym-mig
+    source: community/modules/compute/mig
+    settings:
+      name: sym-mig
+      versions:
+      - name: default
+        instance_template: $(sym-mig-template.self_link)
+
+- group: compute-vm
+  modules:
+  - id: sym-compute-vm
+    source: modules/compute/vm-instance
+    use: 
+    - sym-compute-script
+    - network
+    - symphony-sa
+    settings:
+      name_prefix: $(vars.deployment_name)-compute
+      machine_type: $(vars.compute_machine_type)
+      instance_image: $(vars.new_image)
+      instance_count: 1
+
+- group: master-node
+  modules:
+  - id: sym-master-script
+    source: modules/scripts/startup-script
+    settings:
+      install_cloud_ops_agent: true
+      runners:
+      - type: shell
+        destination: setup_master.sh
+        content: |
+          #!/bin/bash
+          set -e
+          REPO="$(vars.scientific_computing_examples_repo)"
+          # Resources
+          mkdir -p /etc/google-cloud-ops-agent/
+          curl -fsSL "$REPO/resources/google-ops-agent-config.yaml" -o /etc/google-cloud-ops-agent/config.yaml || true
+          curl -fsSL "$REPO/resources/sym_mig_provider.py" -o /tmp/sym_mig_provider.py
+          # Scripts
+          curl -fsSL "$REPO/scripts/hostfactoryconf_json.sh" | bash -s -- $(vars.sym_install_dir)
+          curl -fsSL "$REPO/scripts/gcpgceinstprov_config_json.sh" | bash -s -- $(vars.sym_install_dir) $(vars.project_id) $(vars.sym_pubsub_topic) $(vars.sym_pubsub_subscription)
+          curl -fsSL "$REPO/scripts/sym_master.sh" | bash -s -- $(vars.deployment_name)-master-0 $(vars.sym_install_dir) $(vars.admin_password) $(vars.project_id) $(vars.sym_pubsub_subscription)
+          curl -fsSL "$REPO/scripts/gcpgceinstprov_templates_json.sh" | bash -s -- $(vars.sym_install_dir) "sym-mig,10,X86_64,$(vars.compute_machine_type),$(vars.compute_machine_type),122880,$(vars.zone),sym-mig"
+
+  - id: sym-master-vm
+    source: modules/compute/vm-instance
+    use: 
+    - sym-master-script
+    - network
+    - symphony-sa
+    settings:
+      name_prefix: $(vars.deployment_name)-master
+      machine_type: $(vars.master_machine_type)
+      instance_image: $(vars.new_image)
